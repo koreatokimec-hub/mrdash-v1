@@ -1260,11 +1260,11 @@ window.TKP_MODEL_HASH="template";
  * smoothPath 같은 최상위 함수 선언이 전역에 안 남아 다른 블록이 못 찾는다.
  */
 window.addEventListener('mrdash:ready', () => {
-  document.querySelectorAll('script[data-tkp-boot]').forEach(el => {
+  document.querySelectorAll('script[data-tkp-boot]').forEach((el, i) => {
     try {
       (0, eval)(el.textContent);
     } catch (e) {
-      console.error('스크립트 실행 실패:', el.id || '(이름 없음)', e);
+      console.error(`스크립트 실행 실패: [${i}] ${el.id||'(이름 없음)'} — 줄:${e.stack?.split('\n')[1]||''}`, e);
     }
   });
 });
@@ -1915,11 +1915,14 @@ function buildTeamMapTopology(){
   return columns;
 }
 const TEAM_MAP_TOPOLOGY=buildTeamMapTopology();
-function teamMonthRows(period,selectedIndex=activeMonthIndex??M41.length-1){
+async function teamMonthRows(period,selectedIndex=activeMonthIndex??M41.length-1){
   // 팀 합계는 팀품목캐시(TKP_TEAMITEM, item='' 행)에서 가져온다 — 예전에 TKP.teamItemM[i]가
   // 주던 것과 같은 소스다. summary.sonik.teams(=window.TKP.team)와는 원본이 달라
   // 서로 바꿔 쓰면 미세하게 값이 어긋날 수 있으므로 반드시 이 소스를 유지한다.
+  // 그 달 데이터가 없으면(아직 안 받아왔으면) 서버에서 그 달만 받아온다 — 43개월을
+  // 전부 로그인 시 받지 않고 "연 화면의 달만" 받는 지연 로딩이 여기서 이뤄진다.
   const monthKey=TKP&&TKP.months?.[selectedIndex];
+  if(TKP&&monthKey)await ensureTeamitemMonths([monthKey]);
   const teamItemRows=(window.TKP_TEAMITEM||[]).filter(r=>r.month===monthKey&&r.item==='');
   if(TKP&&teamItemRows.length){
     return teamItemRows.map(row=>{
@@ -1968,10 +1971,26 @@ function teamTips(periodData,selectedIndex=activeMonthIndex??M41.length-1){
 }
 
 let teamMainMetric='sales',teamMainView='bar',teamMainPeriod='M',teamMainMonthIndex=activeMonthIndex??M41.length-1,teamMainSort='desc';
-function renderTeamMain(view=teamMainView){
+/**
+ * teamMonthRows가 서버에서 그 달 데이터를 받아와야 해서(비동기) 이 함수도 비동기다.
+ * 월을 빠르게 연속으로 바꿔도(드롭다운 연타 등) 가장 나중에 시작한 호출의 결과만
+ * 반영되도록 순번을 매긴다.
+ */
+let teamMainRenderSeq=0;
+async function renderTeamMain(view=teamMainView){
+  const mySeq=++teamMainRenderSeq;
   const svg=document.getElementById('teamChart');
   const summary=document.getElementById('teamMainSummary');
-  const selectedIndex=teamMainMonthIndex,periodData=teamMonthRows(teamMainPeriod,selectedIndex);
+  const selectedIndex=teamMainMonthIndex;
+  let periodData;
+  try{
+    periodData=await teamMonthRows(teamMainPeriod,selectedIndex);
+  }catch(e){
+    if(mySeq!==teamMainRenderSeq)return;
+    svg.innerHTML=`<text x="590" y="90" font-size="16" fill="var(--bad)" text-anchor="middle">불러오기 실패: ${e.message}</text>`;
+    return;
+  }
+  if(mySeq!==teamMainRenderSeq)return; // 더 최신 요청이 진행 중이면 이 결과는 버린다
   if(TKP&&!periodData.length){
     summary.style.display='none';svg.setAttribute('height','180');svg.setAttribute('viewBox','0 0 1180 180');
     svg.innerHTML='<text x="590" y="90" font-size="18" font-weight="700" fill="var(--bad)" text-anchor="middle">선택 월의 팀 데이터가 없습니다</text>';return;
@@ -3063,43 +3082,58 @@ function decodeProblemRow(r){
 function problemMonthKeys(){
   return problemScopeIndices().map(i=>TKP.months[i]);
 }
-function problemRowsRaw(uiType){
+/**
+ * 점검판매도 거래처처럼 "연 기간의 달만" 서버에서 받아온다 — 23,000여 행 전체를
+ * 로그인 시 다 받지 않는다. 그래서 이 함수부터 아래로는 전부 비동기다.
+ */
+async function problemRowsRaw(uiType){
   if(!TKP)return PROBLEM_SALES_DATA.filter(d=>d.types.includes(uiType)).map(d=>({...d}));
   const wantType=PROBLEM_UI2DATA[uiType];
-  const months=new Set(problemMonthKeys());
+  const months=problemMonthKeys();
+  await ensureProblemMonths(months);
+  const monthSet=new Set(months);
   return (window.TKP_PROBLEM||[])
-    .filter(r=>r.type===wantType&&months.has(r.month))
+    .filter(r=>r.type===wantType&&monthSet.has(r.month))
     .map(decodeProblemRow);
 }
-function problemTypeCount(uiType){
+async function problemTypeCount(uiType){
   if(!TKP)return PROBLEM_SALES_DATA.filter(d=>d.types.includes(uiType)).length;
-  return problemRowsRaw(uiType).length;
+  return (await problemRowsRaw(uiType)).length;
 }
 let problemType='loss';
 let problemCategory='all'; /* 시안 단계: 상품/제품 토글은 자리만 잡아둠. 실데이터에 구분값 생기면 여기서 필터링 연결 */
 let problemSearchText='';
 let currentProblemRows=[];
 let problemSort={key:'profit',dir:'asc'};const PROBLEM_TEXT_KEYS=new Set(['item','vendor','owner']);
-function problemRowsForSelection(type){
+async function problemRowsForSelection(type){
   if(type!=='all')return problemRowsRaw(type);
   const map=new Map();
-  Object.keys(PROBLEM_UI2DATA).forEach(t=>problemRowsRaw(t).forEach(r=>{
-    const k=r.itemCode+'|'+r.vendor+'|'+r.qty+'|'+r.sales;
-    if(!map.has(k))map.set(k,r);
-  }));
+  for(const t of Object.keys(PROBLEM_UI2DATA)){
+    (await problemRowsRaw(t)).forEach(r=>{
+      const k=r.itemCode+'|'+r.vendor+'|'+r.qty+'|'+r.sales;
+      if(!map.has(k))map.set(k,r);
+    });
+  }
   return [...map.values()];
 }
 /* 기간·월이 바뀌면 드롭다운의 건수 표기도 갱신 */
-function refreshProblemOptions(){
-  document.querySelectorAll('#problemTypeFilter option').forEach(opt=>{
-    if(opt.value==='all'){opt.textContent=`전체 (${problemRowsForSelection('all').length}개)`;return}
-    opt.textContent=`${PROBLEM_LABELS[opt.value]||opt.value} (${problemTypeCount(opt.value)}개)`;
-  });
+async function refreshProblemOptions(){
+  const allCount=(await problemRowsForSelection('all')).length;
+  const opts=[...document.querySelectorAll('#problemTypeFilter option')];
+  for(const opt of opts){
+    if(opt.value==='all'){opt.textContent=`전체 (${allCount}개)`;continue}
+    opt.textContent=`${PROBLEM_LABELS[opt.value]||opt.value} (${await problemTypeCount(opt.value)}개)`;
+  }
 }
 refreshProblemOptions();
-function renderProblemSales(){
-  refreshProblemOptions();
-  let rows=problemRowsForSelection(problemType);
+let problemRenderSeq=0;
+async function renderProblemSales(){
+  const mySeq=++problemRenderSeq;
+  const tbody=document.querySelector('#problemTable tbody');
+  if(tbody)tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted)">불러오는 중…</td></tr>';
+  await refreshProblemOptions();
+  let rows=await problemRowsForSelection(problemType);
+  if(mySeq!==problemRenderSeq)return; // 더 최신 요청이 진행 중이면 이 결과는 버린다
   const q=problemSearchText.trim().toLowerCase();
   if(q)rows=rows.filter(r=>[r.item,r.itemCode,r.vendor].some(v=>String(v||'').toLowerCase().includes(q)));
   rows=[...rows];
@@ -3675,8 +3709,9 @@ document.getElementById('monthSelect').addEventListener('change',e=>{
             r.m_sales_goods,r.m_sales_product,r.m_sales_etc,r.m_sales_total,
             r.m_profit_goods,r.m_profit_product,r.m_profit_etc,r.m_profit_total].map(v=>+v||0);
   }
-  function buildDATA(){
+  async function buildDATA(){
     const idx=activeIndex(),monthKey=M.months[idx];
+    if(monthKey)await ensureTeamitemMonths([monthKey]); // 그 달만 서버에서 받아온다 (지연 로딩)
     const monthRows=(window.TKP_TEAMITEM||[]).filter(r=>r.month===monthKey);
     const byTeam=new Map();
     monthRows.forEach(r=>{
@@ -3762,11 +3797,12 @@ document.getElementById('monthSelect').addEventListener('change',e=>{
   function subtotalRow(key){const label=buLabel[key],isOpen=buOpen[key];const cols=[];metrics.forEach((m,mi)=>{const open=expandedMetrics.has(m);subCatsFor(m).forEach((c,ci)=>{const v=aggregateBU(key,m,c),cls='tone-subtotal'+(open?' kj-grp-open':'')+(ci===0&&mi>0?' kj-grp-edge':''),d=(c==='total')?deltaHtml(buDelta(key,m),m):'';cols.push('<td>'+cell(fmt(v,m),cls,c!=='total',d,false)+'</td>')})});return'<tr class="kj-subtotal-row"><td class="row-head"><button class="kj-row-button" data-bu-row="'+key+'"><b>'+label+'</b><span><i class="kj-chev'+(isOpen?' open':'')+'">▸</i></span></button></td>'+cols.join('')+'</tr>'}
   function buSectionRows(key){let h=subtotalRow(key);if(buOpen[key])teamsOf(key).forEach(({t,i},idx)=>{h+=dataRow(t,i,false,key,idx===0)+detailRows(t,i)});return h}
   function colGroup(){const anyOpen=expandedMetrics.size>0;let g='<colgroup><col style="width:136px">';metrics.forEach(m=>{const cols=subCatsFor(m),w=cols.length>1?116:(anyOpen?72:210);cols.forEach(()=>{g+='<col style="width:'+w+'px">'})});return g+'</colgroup>'}
-  function render(){const table=document.getElementById('kjInvTable');if(!table)return;DATA=buildDATA();syncPeriodLabels();let body='';if(tableExpanded)BU_KEYS.forEach(key=>body+=buSectionRows(key));const totalRow={team:'전사',details:null,total:{[period]:Object.fromEntries(metrics.map(m=>[m,Object.fromEntries([...cats,'total'].map(c=>[c,aggregate(m,c)]))]))}};body+=dataRow(totalRow,null,true);table.innerHTML=colGroup()+'<thead>'+headRows()+'</thead><tbody>'+body+'</tbody>';table.classList.toggle('has-open',expandedMetrics.size>0);const card=table.closest('.kj-inv-card'),toggle=card&&card.querySelector('[data-table-toggle]');if(card){card.classList.toggle('is-expanded',tableExpanded);card.querySelectorAll('[data-table-trigger]').forEach(trigger=>trigger.setAttribute('aria-expanded',String(tableExpanded)))}if(toggle)toggle.textContent=tableExpanded?'접기 ▲':'팀별 상세 펼치기 ▼';bindTable(table)}
+  let invRenderSeq=0;
+  async function render(){const mySeq=++invRenderSeq;const table=document.getElementById('kjInvTable');if(!table)return;DATA=await buildDATA();if(mySeq!==invRenderSeq)return;syncPeriodLabels();let body='';if(tableExpanded)BU_KEYS.forEach(key=>body+=buSectionRows(key));const totalRow={team:'전사',details:null,total:{[period]:Object.fromEntries(metrics.map(m=>[m,Object.fromEntries([...cats,'total'].map(c=>[c,aggregate(m,c)]))]))}};body+=dataRow(totalRow,null,true);table.innerHTML=colGroup()+'<thead>'+headRows()+'</thead><tbody>'+body+'</tbody>';table.classList.toggle('has-open',expandedMetrics.size>0);const card=table.closest('.kj-inv-card'),toggle=card&&card.querySelector('[data-table-toggle]');if(card){card.classList.toggle('is-expanded',tableExpanded);card.querySelectorAll('[data-table-trigger]').forEach(trigger=>trigger.setAttribute('aria-expanded',String(tableExpanded)))}if(toggle)toggle.textContent=tableExpanded?'접기 ▲':'팀별 상세 펼치기 ▼';bindTable(table)}
   function bindTable(table){table.querySelectorAll('.kj-metric-head').forEach(b=>b.onclick=()=>{const m=b.dataset.colmetric,wasOpen=expandedMetrics.has(m);expandedMetrics.clear();if(!wasOpen)expandedMetrics.add(m);render()});table.querySelectorAll('[data-bu-row]').forEach(b=>b.onclick=()=>{const key=b.dataset.buRow;buOpen[key]=!buOpen[key];render()});table.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{const i=+b.dataset.team;if(openDetail.has(i))openDetail.delete(i);else if(DATA[i].details&&DATA[i].details.length)openDetail.add(i);selectedTeam=selectedTeam===i?null:i;render()})}
-  window.KJ_OPEN_TEAM_DATA=(teamName,monthIndex)=>{
+  window.KJ_OPEN_TEAM_DATA=async(teamName,monthIndex)=>{
     if(Number.isInteger(monthIndex)&&M.months[monthIndex])localMonthKey=M.months[monthIndex];
-    DATA=buildDATA();
+    DATA=await buildDATA();
     const index=DATA.findIndex(item=>norm(item.team)===norm(teamName));
     if(index<0)return;
     tableExpanded=true;
@@ -4354,11 +4390,11 @@ ${prior}`;
     answer.innerHTML=`<h3>${esc(text)}</h3><p class="rag-answer-summary">어떤 기준으로 조회할까요? 아래 항목 중 하나를 검색창에 입력해 주세요.</p>${chips(choices)}<p class="rag-answer-summary">예: <b>${esc(activeTeam?activeTeam+' 월별':'전체 팀')}</b></p>`;
   }
   function applyTarget(target){const suffix={"team-month":activeTeam||'',team:'전체 팀',goods:'상품',product:'제품',category:'상품·제품 전체',item:'개별 품목'}[target]||'';input.value=(pendingText+' '+suffix).trim();suggestions.innerHTML=defaultSuggestions;render(input.value)}
-  function render(text){
+  async function render(text){
     if(!text.trim())return;text=String(text).replace(/영억이익|영역이익|영익이익/g,'영업이익').replace(/이익율/g,'이익률').replace(/(?<!\d)(\d{2})년/g,'20$1년');
     if(pendingText){const reply=text.trim(),isTarget=/^(?:전체\s*팀|팀|상품|제품|상품[·\s]*제품\s*전체|개별\s*품목|품목)$/.test(reply)||!!matchTeam(reply);if(isTarget){const original=pendingText;pendingText='';text=(original+' '+(reply==='팀'?'전체 팀':reply)).trim();input.value=text}}
     const namedTeam=matchTeam(text),threshold=parseThreshold(text),explicitTarget=/팀|상품|제품|원자재|품목|판매품|아이템|거래처/.test(text);
-    if(!namedTeam&&!threshold){const ownerHit=matchOwner(text);if(ownerHit){renderOwnerProblems({owner:ownerHit},text);return}}
+    if(!namedTeam&&!threshold){const ownerHit=await matchOwner(text);if(ownerHit){renderOwnerProblems({owner:ownerHit},text);return}}
     if(threshold&&!namedTeam&&!explicitTarget){requestTarget(text);return}
     const plan=parseQuestion(text);
     const namedTeams=matchTeams(text);
@@ -4461,8 +4497,17 @@ ${prior}`;
     ownerRowsCache=out;
     return out;
   }
-  const ownerNames=(window.TKP_PROBLEM&&window.TKP_PROBLEM.length)?[...new Set(ownerProblemRows().map(r=>r.owner).filter(Boolean))]:[];
-  const matchOwner=text=>{const normalized=norm(text);return ownerNames.find(o=>o.length>=2&&normalized.includes(norm(o)))||null};
+  /**
+   * 담당자 이름을 인식하려면 43개월 전체를 훑어야 한다(그 이름이 어느 달에 있었는지
+   * 모르므로). 그래서 이건 예외적으로 "챗봇을 처음 쓸 때 전체를 한 번" 받는다 —
+   * 로그인 시 항상 받는 게 아니라, 실제로 이 기능을 쓰는 순간에만.
+   */
+  const matchOwner=async text=>{
+    await ensureAllProblemLoaded();
+    const ownerNames=[...new Set(ownerProblemRows().map(r=>r.owner).filter(Boolean))];
+    const normalized=norm(text);
+    return ownerNames.find(o=>o.length>=2&&normalized.includes(norm(o)))||null;
+  };
   function renderOwnerProblems(command,original){
     const requested=String(command.owner||'').trim(),q=norm(requested);
     if(!q){answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">확인할 담당자 이름을 입력해 주세요.</p>`;return}
@@ -4562,7 +4607,7 @@ ${prior}`;
   async function submitQuestion(text){
     text=String(text||'').trim();if(!text||geminiBusy)return;
     saveView();input.value='';const base=chatHtml,key=apiKeyInput.value.trim();
-    const ownerHit=matchOwner(text);if(ownerHit&&!matchTeam(text)){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
+    const ownerHit=await matchOwner(text);if(ownerHit&&!matchTeam(text)){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
     if(!key){render(text);finishTurn(base,text);return}
     geminiBusy=true;sendButton.disabled=true;backButton.disabled=true;resetButton.disabled=true;const stopLoading=startLoading(base,text);
     try{

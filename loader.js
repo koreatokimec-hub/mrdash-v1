@@ -1,38 +1,40 @@
 /**
- * 손익 대시보드 — 로그인 + 데이터 로더
+ * 손익 대시보드 — 로그인 + 데이터 로더 (2차 개정)
  *
- * 기존 ui_rag.html은 파일 안의 암호화된 TKP_MODEL을 그대로 읽어 쓰던 구조였다.
- * 이 스크립트는 그 자리를 대신한다:
- *   1) 로그인 화면을 띄우고
- *   2) 성공하면 GAS에서 team/teamitem/problem/vendor를 한 번에 받아 TKP_MODEL 모양으로 조립하고
- *   3) 거래처(partner)만 화면에서 기간을 바꿀 때마다 그때그때 받아온다 (제일 크고, 이름+금액이 실려서
- *      "F12로 43개월 전부가 보이는" 문제의 핵심이었던 데이터라 여기만 지연 로딩한다)
- *
- * 기존 화면 코드(teamMonthRows/problemRowsRaw/customerTableRows/buildDATA)는 압축 배열 대신
- * 이름 있는 평범한 객체를 읽도록 그 4곳만 고친다. 나머지 렌더링 로직은 그대로 둔다.
+ * 1차 버전 대비 바뀐 것:
+ *   - 로그인·요약·팀·거래처점검을 요청 1번(loginAndBoot)으로 합침
+ *     (따로 부르면 왕복마다 고정 오버헤드가 붙어 그것만으로 수십 초가 든다)
+ *   - 팀품목(teamitem)·점검판매(problem)도 거래처처럼 "연 화면의 달만" 받아온다
+ *     (전체를 로그인 시 다 받던 걸 없앰 — 초기 로딩이 느렸던 진짜 원인)
+ *   - 파일에 내장된 TKP_MODEL은 화면을 마지막으로 만들 때의 스냅샷이 박제돼 있어
+ *     최신월이 항상 그 시점(예: 2026-05)으로 나온다. summary로 즉시 덮어쓴다.
  */
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbx1rBiqSLllTjra733b7uqK-rJFPQIwmFnk7wKJkLmmQNSaAzOWSb0RDZYZPxh1A0mY1w/exec";
 
-// 로그인 성공 시 채워진다. 화면 코드는 이 객체를 TKP_MODEL 대신 참조한다.
 window.TKP = {
   ready: false,
-  team: [],       // 43개월 × 팀 (한 번에 전부)
-  teamitem: [],   // 43개월 × (팀 + 품목) (한 번에 전부)
-  problem: [],    // 점검판매 5종 통합, 43개월 전부 (챗봇 담당자 인식 때문에 전부 필요)
-  vendor: [],     // 43개월 × 협력업체 (한 번에 전부)
-  partnerCache: new Map(), // key: "YYYY-MM" -> 그 달 거래처 배열. 한 번 받으면 재요청 안 함
+  team: [], teamitem: [], problem: [], vendor: [], summary: [],
+  partnerCache: new Map(),   // "YYYY-MM" -> 그 달 거래처 행
+  teamitemCache: new Map(),  // "YYYY-MM" -> 그 달 팀품목 행
+  problemCache: new Map(),   // "YYYY-MM" -> 그 달 점검판매 행
+  problemFullyLoaded: false, // 챗봇 담당자 인식은 전체가 필요 — 첫 사용 시 한 번만 전부 받는다
 };
 
 let SESSION = sessionStorage.getItem('mrdash_session') || '';
 let ME = sessionStorage.getItem('mrdash_name') || '';
 
 /**
- * GAS가 가끔 순간적으로 오류(주로 404/503)를 낸다 — 재배포 지연 때문일 수도 있고
- * 구글 쪽 일시적 문제일 수도 있다. upload.py/test_auth.py에서도 겪은 문제라
- * 같은 방식(몇 번 재시도)으로 대응한다.
+ * GAS가 가끔 순간적으로 오류(404/503)를 낸다 — 몇 번 재시도한다.
+ *
+ * 그리고 로그인 직후엔 또 다른 종류의 일시적 문제가 있다: loginAndBoot가 세션을
+ * 시트에 쓴 직후, 화면이 곧바로 여러 data 요청(팀품목·점검판매 등)을 동시에
+ * 보내면 그중 일부가 "방금 만든 세션"을 아직 못 찾아 로그인 필요 오류를 준다
+ * (시트 쓰기가 다른 요청에서 보이기까지의 아주 짧은 시차 때문). 이건 네트워크
+ * 예외가 아니라 200 응답 안에 {ok:false} 로 담겨오므로 아래에서 따로 잡아야 한다.
  */
 async function gasCall(payload, attempt = 1) {
+  let body;
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
@@ -40,55 +42,233 @@ async function gasCall(payload, attempt = 1) {
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
-    return await res.json();
+    body = await res.json();
   } catch (e) {
     if (attempt >= 4) throw e;
     await new Promise(r => setTimeout(r, 1500));
     return gasCall(payload, attempt + 1);
   }
-}
 
-/**
- * 로그인 시 한 번에 받는 것들. team/teamitem/vendor는 작아서 부담 없고,
- * problem은 크지만(23,238행) 챗봇의 담당자 인식이 전체를 요구해서 어차피 필요하다.
- * partner(거래처, 10,578행)만 여기서 안 받는다 — 그게 유일하게 진짜 지연 로딩 대상이다.
- */
-// 화면 코드가 참조하는 전역 이름. dataset 키와 다르게 대문자로 둬서
-// window.TKP(TKP_MODEL이 아니라 이 로더가 만든 객체)와 헷갈리지 않게 한다.
-const GLOBAL_NAME = { team: 'TKP_TEAM', teamitem: 'TKP_TEAMITEM', problem: 'TKP_PROBLEM', vendor: 'TKP_VENDOR' };
-
-async function loadFullDatasets(onProgress) {
-  const datasets = ['team', 'teamitem', 'problem', 'vendor'];
-  for (const ds of datasets) {
-    onProgress?.(ds);
-    const r = await gasCall({ action: 'data', session: SESSION, dataset: ds, month: null });
-    if (!r.ok) throw new Error(r.error || `${ds} 로딩 실패`);
-    window.TKP[ds] = r.rows;
-    window[GLOBAL_NAME[ds]] = r.rows; // 화면 코드는 이 이름으로 참조한다 (예: window.TKP_TEAMITEM)
+  const isSessionRace = !body.ok && payload.session && /로그인/.test(body.error || '');
+  if (isSessionRace && attempt < 4) {
+    await new Promise(r => setTimeout(r, 500 * attempt));
+    return gasCall(payload, attempt + 1);
   }
+  return body;
+}
+
+// ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
+
+function applyBootPayload(r) {
+  window.TKP.team = r.team; window.TKP_TEAM = r.team;
+  window.TKP.vendor = r.vendor; window.TKP_VENDOR = r.vendor;
+  window.TKP.summary = r.summary; window.TKP_SUMMARY = r.summary;
+  patchModelWithLiveSummary(r.summary);
+  patchTeamSeries(r.team);
+  patchBuSnapshot(r.team);
+  padStaleArraysToCurrentLength(); // 아직 못 갱신한 필드들이 죽지 않게 최소한의 방어
 }
 
 /**
- * 거래처 데이터를 필요한 만큼만 받는다. 이미 받은 달은 다시 요청하지 않는다.
- * customerScopeIndices() 가 돌려주는 월 인덱스들을 M41(라벨 배열)로 변환해 넘겨받는다.
- *
- * @param {string[]} months  "YYYY-MM" 형식의 월 목록 (기간 선택에 해당하는 달들)
- * @returns {object[]}  그 달들의 거래처 행을 합친 배열 (customerTableRows가 바로 쓸 수 있는 모양)
+ * 파일 안에 내장된 TKP_MODEL의 months/labels/latest/sales/profit/rates 를
+ * 실제 서버 데이터(summary)로 덮어쓴다. 이게 없으면 화면이 항상 파일 제작 시점의
+ * 옛 스냅샷 월을 "최신월"로 표시한다.
  */
-async function ensurePartnerMonths(months) {
-  const missing = months.filter(m => !window.TKP.partnerCache.has(m));
-  if (missing.length) {
-    // 없는 달들을 한 번의 요청으로 묶어서 받는다 ("전체" 선택 시 43번 나눠 부르지 않도록).
-    const r = await gasCall({ action: 'data', session: SESSION, dataset: 'partner', months: missing });
-    if (!r.ok) throw new Error(r.error || '거래처 데이터 로딩 실패');
+function patchModelWithLiveSummary(summaryRows) {
+  const M = window.TKP_MODEL;
+  if (!M || !summaryRows || !summaryRows.length) return;
 
-    // 받은 걸 달별로 다시 나눠 캐시에 저장한다. 서버가 그 달 자료를 아예 안 줬다면(원본에
-    // 없는 달) 빈 배열로 표시해 다음에 또 요청하지 않게 한다.
+  const rows = [...summaryRows].sort((a, b) => a.month < b.month ? -1 : 1);
+  const won = v => +v || 0;
+  const eok = v => won(v) / 1e8; // 원 -> 억
+
+  M.months = rows.map(r => r.month);
+  M.labels = rows.map(r => { const [y, m] = r.month.split('-'); return `${y.slice(2)}.${+m}`; });
+  M.latest = M.months[M.months.length - 1];
+
+  M.sales = {
+    goods: rows.map(r => eok(r.sales_goods)),
+    product: rows.map(r => eok(r.sales_product)),
+    other: rows.map(r => eok(r.sales_etc)),
+    all: rows.map(r => eok(r.sales_total)),
+  };
+  M.profit = {
+    goods: rows.map(r => eok(r.profit_goods)),
+    product: rows.map(r => eok(r.profit_product)),
+    other: rows.map(r => eok(r.profit_etc)),
+    all: rows.map(r => eok(r.profit_total)),
+  };
+  // salesWon/profitWon: sales/profit(억 단위)와 별개로 원 단위 그대로도 쓰는 곳이 있다
+  // (팀별 손익 현황의 "당월 매출 구성" 등). 안 채우면 그쪽 계산이 NaN이 된다.
+  M.salesWon = {
+    goods: rows.map(r => won(r.sales_goods)),
+    product: rows.map(r => won(r.sales_product)),
+    other: rows.map(r => won(r.sales_etc)),
+    all: rows.map(r => won(r.sales_total)),
+  };
+  M.profitWon = {
+    goods: rows.map(r => won(r.profit_goods)),
+    product: rows.map(r => won(r.profit_product)),
+    other: rows.map(r => won(r.profit_etc)),
+    all: rows.map(r => won(r.profit_total)),
+  };
+  M.rates = {
+    all: rows.map(r => won(r.sales_total) ? won(r.profit_total) / won(r.sales_total) * 100 : 0),
+  };
+}
+
+/**
+ * 파일에 내장된 teamSeries는 팀 이름 표기까지 다른 더 오래된 스냅샷(41개월,
+ * "산기시스템팀" 표기)이라 지금 팀명("산기 시스템팀")과 안 맞고 개월수도 부족하다.
+ * 이미 전체 로딩된 team 데이터(44개월×전체 팀, 정확함)로 통째로 다시 만든다.
+ */
+const BU_SHORT_NAME = { 'HPC B.U': 'HPC', 'PMC B.U': 'PMC', '기획 생산 B.U': '기획/생산' };
+
+function patchTeamSeries(teamRows) {
+  const M = window.TKP_MODEL;
+  if (!M || !teamRows || !teamRows.length) return;
+
+  const months = M.months; // patchModelWithLiveSummary가 이미 정리해둔 최신 월 순서
+  const byTeam = new Map();
+  const byBu = new Map(); // 부문별 시계열(TKP.buSeries)도 같은 원본에서 같이 만든다
+  teamRows.forEach(r => {
+    if (!byTeam.has(r.team)) byTeam.set(r.team, new Map());
+    byTeam.get(r.team).set(r.month, r);
+
+    const short = BU_SHORT_NAME[r.bu] || r.bu;
+    if (!byBu.has(short)) byBu.set(short, new Map());
+    const bucket = byBu.get(short);
+    const prev = bucket.get(r.month) || { sales: 0, profit: 0 };
+    prev.sales += +r.m_sales_total || 0;
+    prev.profit += +r.m_profit_total || 0;
+    bucket.set(r.month, prev);
+  });
+
+  const teamSeries = {};
+  byTeam.forEach((byMonth, teamName) => {
+    teamSeries[teamName] = {
+      sales: months.map(m => +(byMonth.get(m)?.m_sales_total) / 1e8 || 0),
+      profit: months.map(m => +(byMonth.get(m)?.m_profit_total) / 1e8 || 0),
+    };
+  });
+  M.teamSeries = teamSeries;
+
+  const buSeries = {};
+  byBu.forEach((byMonth, buName) => {
+    buSeries[buName] = {
+      sales: months.map(m => (byMonth.get(m)?.sales || 0) / 1e8),
+      profit: months.map(m => (byMonth.get(m)?.profit || 0) / 1e8),
+    };
+  });
+  M.buSeries = buSeries;
+}
+
+/**
+ * M.bu 는 시계열이 아니라 "화면을 만든 시점의 당월/누계 스냅샷"이다
+ * ({M:[[부문,매출,이익률],...], Y:[...]}) — 그래서 패딩(마지막 값 복제)으로는
+ * 못 고친다. team 데이터로 최신월 기준 부문별 합계를 다시 계산해서 덮어쓴다.
+ */
+function patchBuSnapshot(teamRows) {
+  const M = window.TKP_MODEL;
+  if (!M || !teamRows || !teamRows.length) return;
+
+  const latest = M.months[M.months.length - 1];
+  const year = latest.slice(0, 4);
+
+  const snapshot = scope => {
+    const acc = new Map(); // 짧은 이름 -> {sales, profit}
+    teamRows.forEach(r => {
+      if (scope === 'M' && r.month !== latest) return;
+      if (scope === 'Y' && !(r.month.startsWith(year) && r.month <= latest)) return;
+      const short = BU_SHORT_NAME[r.bu] || r.bu;
+      const a = acc.get(short) || { sales: 0, profit: 0 };
+      a.sales += +r.m_sales_total || 0;
+      a.profit += +r.m_profit_total || 0;
+      acc.set(short, a);
+    });
+    return [...acc.entries()].map(([name, a]) => {
+      const salesEok = a.sales / 1e8, profitEok = a.profit / 1e8;
+      const rate = a.sales ? a.profit / a.sales * 100 : 0;
+      return [name, +salesEok.toFixed(4), +rate.toFixed(3)];
+    });
+  };
+
+  M.bu = { M: snapshot('M'), Y: snapshot('Y') };
+}
+
+/**
+ * customerHistory/itemHistory/bandTeamSeries 등은 원본 규모가 커서(거래처 610개 ×
+ * 44개월 등) 이번엔 아직 손대지 못했다 — 그래도 최소한 "배열 길이가 달라 마지막
+ * 달을 읽다 죽는" 사고는 막아야 한다. 부족한 개월 수만큼 마지막 값을 그대로
+ * 복제해 채운다. 주의: 이러면 그 화면들의 "최신월" 값은 실제 최신이 아니라
+ * 직전에 있던 값의 반복이다 — 부정확할 수 있다는 뜻이지, 실제 데이터가 아니다.
+ */
+function padStaleArraysToCurrentLength() {
+  const M = window.TKP_MODEL;
+  if (!M) return;
+  const target = M.months.length;
+
+  const padArray = arr => {
+    if (!Array.isArray(arr) || !arr.length) return arr;
+    while (arr.length < target) arr.push(arr[arr.length - 1]);
+    return arr;
+  };
+
+  Object.values(M.customerHistory || {}).forEach(h => {
+    padArray(h.sales); padArray(h.profit); padArray(h.rate);
+  });
+  Object.values(M.itemHistory || {}).forEach(h => {
+    padArray(h.sales); padArray(h.profit); padArray(h.rate);
+  });
+  // bandTeamSeries/YtdSeries 는 {팀명: [월별 배열]} 형태의 객체다 (배열이 아니다)
+  Object.values(M.bandTeamSeries || {}).forEach(padArray);
+  Object.values(M.bandTeamYtdSeries || {}).forEach(padArray);
+}
+
+// ── 지연 로딩 (거래처 / 팀품목 / 점검판매) ──────────────────
+//
+// 셋 다 같은 모양이라 함수 하나로 공유한다: 없는 달만 서버에 물어보고,
+// 있는 달은 그대로 캐시에서 돌려준다.
+
+async function ensureMonths(dataset, cache, globalName, months) {
+  const missing = months.filter(m => !cache.has(m));
+  if (missing.length) {
+    const r = await gasCall({ action: 'data', session: SESSION, dataset, months: missing });
+    if (!r.ok) throw new Error(r.error || `${dataset} 로딩 실패`);
+
     const byMonth = new Map(missing.map(m => [m, []]));
     r.rows.forEach(row => byMonth.get(row.month)?.push(row));
-    byMonth.forEach((rows, m) => window.TKP.partnerCache.set(m, rows));
+    byMonth.forEach((rows, m) => cache.set(m, rows));
   }
-  return months.flatMap(m => window.TKP.partnerCache.get(m) || []);
+  const merged = months.flatMap(m => cache.get(m) || []);
+  if (globalName) window[globalName] = merged; // 화면 코드가 참조하는 이름도 최신 상태로 유지
+  return merged;
+}
+
+const ensurePartnerMonths = months => ensureMonths('partner', window.TKP.partnerCache, null, months);
+const ensureTeamitemMonths = months => ensureMonths('teamitem', window.TKP.teamitemCache, 'TKP_TEAMITEM', months);
+const ensureProblemMonths = months => ensureMonths('problem', window.TKP.problemCache, 'TKP_PROBLEM', months);
+
+/**
+ * 챗봇의 담당자 이름 인식은 43개월 전체를 훑어야 해서(누가 있었는지 미리 알아야 함)
+ * 특정 달만으로는 안 된다. 그래서 이것만 예외적으로 "첫 사용 시 전체를 한 번" 받고,
+ * 그 뒤로는 캐시를 재사용한다 — 로그인 때 항상 받는 게 아니라 챗봇을 실제로 열 때만.
+ */
+async function ensureAllProblemLoaded() {
+  if (window.TKP.problemFullyLoaded) return window.TKP_PROBLEM;
+  const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
+  if (!r.ok) throw new Error(r.error || 'problem 전체 로딩 실패');
+
+  const byMonth = new Map();
+  r.rows.forEach(row => {
+    if (!byMonth.has(row.month)) byMonth.set(row.month, []);
+    byMonth.get(row.month).push(row);
+  });
+  byMonth.forEach((rows, m) => window.TKP.problemCache.set(m, rows));
+
+  window.TKP_PROBLEM = r.rows;
+  window.TKP.problemFullyLoaded = true;
+  return r.rows;
 }
 
 // ── 로그인 화면 ──────────────────────────────────────────
@@ -98,8 +278,6 @@ function renderLoginScreen() {
   box.id = 'mrdashLogin';
   box.innerHTML = `
     <style>
-      /* html.dashboard-loading body{visibility:hidden} 규칙이 이 오버레이까지 숨기므로
-         명시적으로 되돌린다 — visibility는 조상이 hidden이어도 자손에서 visible로 뒤집을 수 있다 */
       #mrdashLogin{position:fixed;inset:0;background:#f4f4f6;z-index:99999;visibility:visible;
         display:flex;align-items:center;justify-content:center;
         font-family:system-ui,"Malgun Gothic",sans-serif}
@@ -137,36 +315,39 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    const r = await gasCall({ action: 'login', name, password });
+    const r = await gasCall({ action: 'loginAndBoot', name, password });
     if (!r.ok) { $msg.style.color = '#c62828'; $msg.textContent = r.error; return; }
 
     SESSION = r.session; ME = r.name;
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
 
-    $msg.style.color = '#555';
-    $msg.textContent = '데이터를 불러오는 중...';
-    await loadFullDatasets(ds => { $msg.textContent = `불러오는 중... (${ds})`; });
-
-    window.TKP.ready = true;
-    document.getElementById('mrdashLogin').remove();
-    window.dispatchEvent(new CustomEvent('mrdash:ready')); // 화면 코드가 이 시점부터 그리기 시작
+    applyBootPayload(r);
+    finishBoot();
   } catch (e) {
     $msg.style.color = '#c62828';
     $msg.textContent = '연결 실패: ' + e.message;
   } finally {
-    $btn.disabled = false;
+    if ($btn) $btn.disabled = false; // 로그인 성공 시 이 시점엔 이미 로그인 화면이 제거돼 있다
   }
 }
 
-// 이미 로그인된 세션이 있으면(같은 탭, 새로고침) 다시 로그인 화면을 안 띄우고 바로 데이터만 받는다.
-// 세션이 만료됐으면 서버가 401 성격의 에러를 주므로 그때는 로그인 화면으로 되돌린다.
+function finishBoot() {
+  window.TKP.ready = true;
+  document.getElementById('mrdashLogin')?.remove();
+  renderAccountBar();
+  window.dispatchEvent(new CustomEvent('mrdash:ready')); // 화면 코드가 이 시점부터 그리기 시작
+}
+
+// 이미 로그인된 세션이 있으면(같은 탭, 새로고침) 로그인 화면 없이 boot만 다시 부른다.
+// 세션이 만료됐으면 서버가 오류를 주므로 그때는 로그인 화면으로 되돌린다.
 async function boot() {
   if (SESSION) {
     try {
-      await loadFullDatasets();
-      window.TKP.ready = true;
-      window.dispatchEvent(new CustomEvent('mrdash:ready'));
+      const r = await gasCall({ action: 'boot', session: SESSION });
+      if (!r.ok) throw new Error(r.error);
+      applyBootPayload(r);
+      finishBoot();
       return;
     } catch (e) {
       sessionStorage.removeItem('mrdash_session');
@@ -175,6 +356,96 @@ async function boot() {
     }
   }
   renderLoginScreen();
+}
+
+// ── 계정 표시줄 (누구로 로그인했는지 + 비밀번호 변경 + 로그아웃) ──
+//
+// 원래 화면(ui_rag.html)엔 이런 자리가 없어서, 로그인 후 화면 맨 위에 얇은 줄로 얹는다.
+
+function renderAccountBar() {
+  const bar = document.createElement('div');
+  bar.id = 'mrdashAccountBar';
+  bar.innerHTML = `
+    <style>
+      #mrdashAccountBar{position:fixed;top:0;left:0;right:0;z-index:9998;
+        display:flex;justify-content:flex-end;align-items:center;gap:10px;
+        padding:5px 14px;background:#1a1a1a;color:#ddd;font-size:12px;
+        font-family:system-ui,"Malgun Gothic",sans-serif}
+      #mrdashAccountBar button{background:none;border:1px solid #555;color:#ddd;
+        border-radius:5px;padding:2px 9px;font-size:11.5px;cursor:pointer}
+      #mrdashAccountBar button:hover{background:#333}
+      body{margin-top:26px !important}
+    </style>
+    <span>${ME} 님</span>
+    <button id="mrdashChangePw">비밀번호 변경</button>
+    <button id="mrdashLogout">로그아웃</button>`;
+  document.body.prepend(bar);
+
+  document.getElementById('mrdashChangePw').addEventListener('click', openChangePasswordDialog);
+  document.getElementById('mrdashLogout').addEventListener('click', async () => {
+    try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
+    sessionStorage.removeItem('mrdash_session');
+    sessionStorage.removeItem('mrdash_name');
+    location.reload();
+  });
+}
+
+function openChangePasswordDialog() {
+  const box = document.createElement('div');
+  box.id = 'mrdashPwDialog';
+  box.innerHTML = `
+    <style>
+      #mrdashPwDialog{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99999;
+        display:flex;align-items:center;justify-content:center;
+        font-family:system-ui,"Malgun Gothic",sans-serif}
+      #mrdashPwDialog .card{background:#fff;padding:20px;border-radius:10px;width:280px}
+      #mrdashPwDialog h3{margin:0 0 12px;font-size:15px}
+      #mrdashPwDialog input{width:100%;padding:8px;margin-bottom:8px;border:1px solid #ccc;
+        border-radius:6px;font-size:13px;box-sizing:border-box}
+      #mrdashPwDialog .row{display:flex;gap:8px;margin-top:6px}
+      #mrdashPwDialog button{flex:1;padding:8px;border-radius:6px;font-size:13px;cursor:pointer}
+      #mrdashPwDialog .ok{background:#1a73e8;color:#fff;border:none}
+      #mrdashPwDialog .cancel{background:#fff;border:1px solid #ccc}
+      #mrdashPwDialog .msg{font-size:12px;color:#c62828;min-height:16px}
+    </style>
+    <div class="card">
+      <h3>비밀번호 변경</h3>
+      <input id="pwOld" type="password" placeholder="현재 비밀번호" autocomplete="current-password">
+      <input id="pwNew" type="password" placeholder="새 비밀번호" autocomplete="new-password">
+      <input id="pwNew2" type="password" placeholder="새 비밀번호 확인" autocomplete="new-password">
+      <div class="msg" id="pwMsg"></div>
+      <div class="row">
+        <button class="cancel" id="pwCancel">취소</button>
+        <button class="ok" id="pwOk">변경</button>
+      </div>
+    </div>`;
+  document.body.appendChild(box);
+
+  const $ = id => document.getElementById(id);
+  $('pwCancel').addEventListener('click', () => box.remove());
+  box.addEventListener('click', e => { if (e.target === box) box.remove(); });
+
+  $('pwOk').addEventListener('click', async () => {
+    const oldPassword = $('pwOld').value, newPassword = $('pwNew').value, confirm = $('pwNew2').value;
+    if (!oldPassword || !newPassword) { $('pwMsg').textContent = '빈칸을 채워주세요'; return; }
+    if (newPassword !== confirm) { $('pwMsg').textContent = '새 비밀번호가 서로 다릅니다'; return; }
+    if (newPassword.length < 4) { $('pwMsg').textContent = '4자 이상으로 설정하세요'; return; }
+
+    $('pwOk').disabled = true;
+    $('pwMsg').style.color = '#555';
+    $('pwMsg').textContent = '처리 중...';
+    try {
+      const r = await gasCall({ action: 'changePassword', session: SESSION, oldPassword, newPassword });
+      if (!r.ok) { $('pwMsg').style.color = '#c62828'; $('pwMsg').textContent = r.error; return; }
+      alert('비밀번호가 변경되었습니다.');
+      box.remove();
+    } catch (e) {
+      $('pwMsg').style.color = '#c62828';
+      $('pwMsg').textContent = '연결 실패: ' + e.message;
+    } finally {
+      $('pwOk').disabled = false;
+    }
+  });
 }
 
 boot();
