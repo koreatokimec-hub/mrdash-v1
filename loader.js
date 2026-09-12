@@ -64,6 +64,7 @@ function applyBootPayload(r) {
   window.TKP.vendor = r.vendor; window.TKP_VENDOR = r.vendor;
   window.TKP.summary = r.summary; window.TKP_SUMMARY = r.summary;
   patchModelWithLiveSummary(r.summary);
+  patchTeamsSnapshot(r.team); // teamSeries보다 먼저 — TEAMS(=M.teams)가 이름 기준이 된다
   patchTeamSeries(r.team);
   patchBuSnapshot(r.team);
   padStaleArraysToCurrentLength(); // 아직 못 갱신한 필드들이 죽지 않게 최소한의 방어
@@ -229,6 +230,29 @@ function patchBuSnapshot(teamRows) {
   };
 
   M.bu = { M: snapshot('M'), Y: snapshot('Y') };
+}
+
+/**
+ * M.teams 는 [[팀명, 부문축약, 매출(억), 이익률], ...] 형태의 "당월 스냅샷"이고,
+ * 화면 상수 TEAMS(=M.teams)가 페이지 전체에서 팀 이름의 기준(진실의 원천)으로 쓰인다.
+ * 이게 옛 스냅샷 이름("공압사업팀", 공백 없음)이면 teamSeries 조회 키
+ * ("공압 사업팀", 공백 있음, team 데이터의 실제 표기)와 어긋나 팀 상세 팝업이 깨진다.
+ * 반드시 patchTeamSeries보다 먼저(또는 같이) 호출해 이름 기준을 통일해야 한다.
+ */
+function patchTeamsSnapshot(teamRows) {
+  const M = window.TKP_MODEL;
+  if (!M || !teamRows || !teamRows.length) return;
+
+  const BU_SHORT2 = { 'HPC B.U': 'HPC', 'PMC B.U': 'PMC', '기획 생산 B.U': '기획 생산' };
+  const latest = M.months[M.months.length - 1];
+
+  M.teams = teamRows
+    .filter(r => r.month === latest)
+    .map(r => {
+      const sales = +r.m_sales_total || 0, profit = +r.m_profit_total || 0;
+      const rate = sales ? profit / sales * 100 : 0;
+      return [r.team, BU_SHORT2[r.bu] || r.bu, +(sales / 1e8).toFixed(4), +rate.toFixed(3)];
+    });
 }
 
 /**
