@@ -3479,17 +3479,14 @@ let currentProduct=null;
 const productModes={sales:'YTD',rate:'YTD',profit:'YTD'};
 const productEndIndex={sales:null,rate:null,profit:null};
 /**
- * itemHistory(파일 내장, 옛 41개월 스냅샷)엔 최근에 새로 문제판매로 잡힌 품목이 없을
- * 수 있다 — 원래 여기서 예외를 던져 화면 전체가 "—"로 멎었었다. 대신 이미 로딩해둔
- * 점검판매(TKP_PROBLEM) 전체에서 그 품목명으로 월별 집계를 만들어 대체한다.
+ * 이 팝업 제목이 "문제 품목 발생 이력"이므로 원래부터 점검판매(problemsM) 기준이어야
+ * 맞는다. itemHistory(파일 내장, 옛 41개월 스냅샷)는 쓰지 않는다 — 예전엔 그걸 먼저
+ * 찾아봤는데, 그 품목이 옛 시절에도 우연히 문제판매로 잡힌 적이 있으면 그 오래된
+ * 값(패딩된 것)을 그대로 보여주고 최신월 데이터를 무시하는 사고가 있었다.
+ * 항상 이미 로딩해둔 점검판매(TKP_PROBLEM) 전체에서 그 품목명으로 월별 집계를 만든다.
  */
 async function productSeries(row){
   if(TKP){
-    const actual=TKP.itemHistory[row.item];
-    if(actual){
-      const firstIndex=actual.sourceMonths.length?TKP.months.indexOf(actual.sourceMonths[0]):M41.length;
-      return {sales:actual.sales,rate:actual.rate,profit:actual.profit,firstIndex};
-    }
     await ensureAllProblemLoaded();
     const byMonth=new Map();
     (window.TKP_PROBLEM||[]).forEach(r=>{
@@ -4627,7 +4624,7 @@ ${prior}`;
   async function submitQuestion(text){
     text=String(text||'').trim();if(!text||geminiBusy)return;
     saveView();input.value='';const base=chatHtml,key=apiKeyInput.value.trim();
-    const ownerHit=await matchOwner(text);if(ownerHit&&!matchTeam(text)){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
+    const ownerHit=matchTeam(text)?null:await matchOwner(text);if(ownerHit){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
     if(!key){render(text);finishTurn(base,text);return}
     geminiBusy=true;sendButton.disabled=true;backButton.disabled=true;resetButton.disabled=true;const stopLoading=startLoading(base,text);
     try{
