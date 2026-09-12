@@ -292,18 +292,28 @@ function padStaleArraysToCurrentLength() {
 // 셋 다 같은 모양이라 함수 하나로 공유한다: 없는 달만 서버에 물어보고,
 // 있는 달은 그대로 캐시에서 돌려준다.
 
+// 완료 캐시와 별도로 진행 중인 월 요청을 공유한다.
+const monthRequests = new Map();
+const datasetRenderSequence = new Map();
 async function ensureMonths(dataset, cache, globalName, months) {
-  const missing = months.filter(m => !cache.has(m));
-  if (missing.length) {
-    const r = await gasCall({ action: 'data', session: SESSION, dataset, months: missing });
-    if (!r.ok) throw new Error(r.error || `${dataset} 로딩 실패`);
-
-    const byMonth = new Map(missing.map(m => [m, []]));
-    r.rows.forEach(row => byMonth.get(row.month)?.push(row));
-    byMonth.forEach((rows, m) => cache.set(m, rows));
+  months = [...new Set(months)];
+  const sequence = (datasetRenderSequence.get(dataset) || 0) + 1;
+  datasetRenderSequence.set(dataset, sequence);
+  const fresh = months.filter(m => !cache.has(m) && !monthRequests.has(dataset + ':' + m));
+  if (fresh.length) {
+    const task = (async () => {
+      const r = await gasCall({ action: 'data', session: SESSION, dataset, months: fresh });
+      if (!r.ok) throw new Error(r.error || `${dataset} 로딩 실패`);
+      const byMonth = new Map(fresh.map(m => [m, []]));
+      r.rows.forEach(row => byMonth.get(row.month)?.push(row));
+      byMonth.forEach((rows, m) => cache.set(m, rows));
+    })().finally(() => fresh.forEach(m => monthRequests.delete(dataset + ':' + m)));
+    fresh.forEach(m => monthRequests.set(dataset + ':' + m, task));
   }
+  await Promise.all([...new Set(months.map(m => monthRequests.get(dataset + ':' + m)).filter(Boolean))]);
   const merged = months.flatMap(m => cache.get(m) || []);
-  if (globalName) window[globalName] = merged; // 화면 코드가 참조하는 이름도 최신 상태로 유지
+  // 늦게 끝난 이전 화면 요청이 최신 화면의 전역 데이터를 덮어쓰지 않는다.
+  if (globalName && datasetRenderSequence.get(dataset) === sequence) window[globalName] = merged;
   return merged;
 }
 
@@ -316,7 +326,12 @@ const ensureProblemMonths = months => ensureMonths('problem', window.TKP.problem
  * 특정 달만으로는 안 된다. 그래서 이것만 예외적으로 "첫 사용 시 전체를 한 번" 받고,
  * 그 뒤로는 캐시를 재사용한다 — 로그인 때 항상 받는 게 아니라 챗봇을 실제로 열 때만.
  */
-async function ensureAllProblemLoaded() {
+let allProblemRequest = null;
+function ensureAllProblemLoaded() {
+  if (!allProblemRequest) allProblemRequest = loadAllProblem().finally(() => { allProblemRequest = null; });
+  return allProblemRequest;
+}
+async function loadAllProblem() {
   if (window.TKP.problemFullyLoaded) return window.TKP_PROBLEM;
   const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
   if (!r.ok) throw new Error(r.error || 'problem 전체 로딩 실패');
