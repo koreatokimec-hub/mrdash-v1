@@ -144,11 +144,46 @@ function patchTeamSeries(teamRows) {
     bucket.set(r.month, prev);
   });
 
+  /**
+   * teamSeries[팀명] 은 sales/profit 만으로 안 끝난다 — 팀 상세 팝업(openTeam)이
+   * rate/gShare(상품비중)/gRate(상품이익률)/pRate(제품이익률)까지 요구한다.
+   * 이게 없어서 팝업의 KPI 카드가 전부 "—"로 보이고 차트도 비어 있었다.
+   * 전부 team 데이터(상품/제품/기타 4구분)에서 정확히 계산할 수 있다.
+   *
+   * bandProfit/loss/high18Share(이익률 구간 분포 관련) 는 team 데이터로는 못 만든다 —
+   * 그건 padStaleArraysToCurrentLength가 패딩한 옛 값을 그대로 쓴다(부정확할 수 있음).
+   */
+  // 옛 teamSeries에 있던 loss/high18Share/bandProfit(밴드분포용, team 데이터로는 못 만듦)을
+  // 이름으로 이어받는다 — 팀명 표기가 달라졌으므로(예: "산기시스템팀" -> "산기 시스템팀")
+  // 공백을 지운 형태로 정규화해서 매칭한다.
+  const norm = s => String(s || '').replace(/\s+/g, '');
+  const staleByNormName = new Map();
+  Object.entries(M.teamSeries || {}).forEach(([name, s]) => staleByNormName.set(norm(name), s));
+
   const teamSeries = {};
   byTeam.forEach((byMonth, teamName) => {
+    const at = (m, field) => +(byMonth.get(m)?.[field]) || 0;
+    const stale = staleByNormName.get(norm(teamName));
     teamSeries[teamName] = {
-      sales: months.map(m => +(byMonth.get(m)?.m_sales_total) / 1e8 || 0),
-      profit: months.map(m => +(byMonth.get(m)?.m_profit_total) / 1e8 || 0),
+      loss: stale?.loss, high18Share: stale?.high18Share, bandProfit: stale?.bandProfit,
+      sales: months.map(m => at(m, 'm_sales_total') / 1e8),
+      profit: months.map(m => at(m, 'm_profit_total') / 1e8),
+      rate: months.map(m => {
+        const s = at(m, 'm_sales_total');
+        return s ? at(m, 'm_profit_total') / s * 100 : 0;
+      }),
+      gShare: months.map(m => {
+        const s = at(m, 'm_sales_total');
+        return s ? at(m, 'm_sales_goods') / s * 100 : 0;
+      }),
+      gRate: months.map(m => {
+        const s = at(m, 'm_sales_goods');
+        return s ? at(m, 'm_profit_goods') / s * 100 : 0;
+      }),
+      pRate: months.map(m => {
+        const s = at(m, 'm_sales_product');
+        return s ? at(m, 'm_profit_product') / s * 100 : 0;
+      }),
     };
   });
   M.teamSeries = teamSeries;
@@ -214,6 +249,9 @@ function padStaleArraysToCurrentLength() {
     return arr;
   };
 
+  Object.values(M.teamSeries || {}).forEach(s => {
+    padArray(s.loss); padArray(s.high18Share); padArray(s.bandProfit);
+  });
   Object.values(M.customerHistory || {}).forEach(h => {
     padArray(h.sales); padArray(h.profit); padArray(h.rate);
   });
@@ -391,6 +429,11 @@ function renderAccountBar() {
 }
 
 function openChangePasswordDialog() {
+  // 비밀번호가 틀려 실패한 뒤 "비밀번호 변경"을 다시 누르면 예전 다이얼로그가 안 지워진 채
+  // 새 다이얼로그가 또 생겨, getElementById가 화면에 안 보이는 예전 것을 잡는 문제가 있었다
+  // ("비밀번호를 잘못 넣으면 창이 닫힌 것처럼 보이고 다시 눌러야 하던" 증상의 원인).
+  document.getElementById('mrdashPwDialog')?.remove();
+
   const box = document.createElement('div');
   box.id = 'mrdashPwDialog';
   box.innerHTML = `
@@ -447,5 +490,9 @@ function openChangePasswordDialog() {
     }
   });
 }
+
+// 사이드바 "로그인 설정" 메뉴 — 원래 화면엔 이 자리가 없어서 nav에 링크 하나만 얹었다.
+// 로그인 전엔 화면 전체가 로그인창에 가려져 있어 눌릴 일이 없다.
+document.getElementById('mrdashPwNavLink')?.addEventListener('click', openChangePasswordDialog);
 
 boot();

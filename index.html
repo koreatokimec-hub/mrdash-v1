@@ -868,7 +868,7 @@ table.tbl td{line-height:1.4}
   </header>
 
   <nav class="tabs" id="tabNav">
-    <a class="on" data-p="p1"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>전체</a><a data-p="p2"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20v-2.2A4.8 4.8 0 0 1 8.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V20M14.5 14.2h1.8a4.2 4.2 0 0 1 4.2 4.2V20"/></svg></span>팀별구분</a><a data-p="p5"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg></span>상세(제품·상품)</a><a data-p="p4"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3v19M12 8h8v13M2 21h20M7 7h2M7 11h2M7 15h2M15 12h2M15 16h2"/></svg></span>상세(거래처)</a><a data-p="p6"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v16H4zM8 3v4M16 3v4M4 9h16"/><path d="m8 17 3-3 2 2 4-4"/></svg></span>연도별 실적비교</a>
+    <a class="on" data-p="p1"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>전체</a><a data-p="p2"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3.5 20v-2.2A4.8 4.8 0 0 1 8.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V20M14.5 14.2h1.8a4.2 4.2 0 0 1 4.2 4.2V20"/></svg></span>팀별구분</a><a data-p="p5"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg></span>상세(제품·상품)</a><a data-p="p4"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5l8-3v19M12 8h8v13M2 21h20M7 7h2M7 11h2M7 15h2M15 12h2M15 16h2"/></svg></span>상세(거래처)</a><a data-p="p6"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v16H4zM8 3v4M16 3v4M4 9h16"/><path d="m8 17 3-3 2 2 4-4"/></svg></span>연도별 실적비교</a><a id="mrdashPwNavLink" href="javascript:void(0)"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>로그인 설정</a>
     <div class="spacer"></div>
   </nav>
 
@@ -3478,12 +3478,32 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElement
 let currentProduct=null;
 const productModes={sales:'YTD',rate:'YTD',profit:'YTD'};
 const productEndIndex={sales:null,rate:null,profit:null};
-function productSeries(row){
+/**
+ * itemHistory(파일 내장, 옛 41개월 스냅샷)엔 최근에 새로 문제판매로 잡힌 품목이 없을
+ * 수 있다 — 원래 여기서 예외를 던져 화면 전체가 "—"로 멎었었다. 대신 이미 로딩해둔
+ * 점검판매(TKP_PROBLEM) 전체에서 그 품목명으로 월별 집계를 만들어 대체한다.
+ */
+async function productSeries(row){
   if(TKP){
     const actual=TKP.itemHistory[row.item];
-    if(!actual)throw new Error(`${row.item} 실제 품목 이력이 없습니다.`);
-    const firstIndex=actual.sourceMonths.length?TKP.months.indexOf(actual.sourceMonths[0]):M41.length;
-    return {sales:actual.sales,rate:actual.rate,profit:actual.profit,firstIndex};
+    if(actual){
+      const firstIndex=actual.sourceMonths.length?TKP.months.indexOf(actual.sourceMonths[0]):M41.length;
+      return {sales:actual.sales,rate:actual.rate,profit:actual.profit,firstIndex};
+    }
+    await ensureAllProblemLoaded();
+    const byMonth=new Map();
+    (window.TKP_PROBLEM||[]).forEach(r=>{
+      if(r.item!==row.item)return;
+      const a=byMonth.get(r.month)||{sales:0,profit:0};
+      a.sales+=r.sales||0;a.profit+=r.profit||0;
+      byMonth.set(r.month,a);
+    });
+    const months=TKP.months;
+    const sales=months.map(m=>(byMonth.get(m)?.sales||0)/10000);
+    const profit=months.map(m=>(byMonth.get(m)?.profit||0)/10000);
+    const rate=sales.map((s,i)=>s?profit[i]/s*100:0);
+    const firstIndex=months.findIndex(m=>byMonth.has(m));
+    return {sales,rate,profit,firstIndex:firstIndex<0?months.length:firstIndex};
   }
   const seed=[...row.item].reduce((a,c)=>(a*33+c.charCodeAt(0))%997,19),sales=[],rate=[],profit=[];
   const baseSales=Math.max(.002,Math.abs(row.sales)/10000),baseRate=Number.isFinite(row.rate)?row.rate:8;
@@ -3500,9 +3520,9 @@ function productApply(series,key,mode,how,end){
   const keep=applied[0].map(label=>M41.indexOf(label)>=first);
   return [applied[0].filter((_,i)=>keep[i]),applied[1].filter((_,i)=>keep[i])];
 }
-function renderProductGraph(key){
+async function renderProductGraph(key){
   if(!currentProduct)return;
-  const series=productSeries(currentProduct);
+  const series=await productSeries(currentProduct);
   const end=productEndIndex[key]??activeMonthIndex??M41.length-1;
   const label=M41[end],year=label.split('.')[0],month=+label.split('.')[1];
   const yearStart=Math.max(series.firstIndex||0,M41.findIndex(l=>l.startsWith(year+'.')));
@@ -3524,9 +3544,9 @@ function renderProductGraph(key){
   }
 }
 let productKpiIndex=null,productKpiIsYtd=false;
-function renderProduct(){
+async function renderProduct(){
   if(!currentProduct)return;
-  const series=productSeries(currentProduct);
+  const series=await productSeries(currentProduct);
   renderProductGraph('sales');renderProductGraph('rate');renderProductGraph('profit');
   const last=productKpiIndex??M41.length-1;
   const negativeRate=series.rate[last]<0,negativeProfit=series.profit[last]<0,profitName=negativeProfit?'손실액':'이익액';
