@@ -3495,9 +3495,12 @@ async function productSeries(row){
       a.sales+=r.sales||0;a.profit+=r.profit||0;
       byMonth.set(r.month,a);
     });
+    // series.sales/profit은 다른 곳(teamSeries 등)과 마찬가지로 "억원" 단위여야 한다
+    // (화면이 이 값에 *100을 곱해 백만원으로 바꾸는 공식을 그대로 쓰기 때문).
+    // 원본 problem.sales/profit은 "원" 단위이므로 1e8로 나눈다.
     const months=TKP.months;
-    const sales=months.map(m=>(byMonth.get(m)?.sales||0)/10000);
-    const profit=months.map(m=>(byMonth.get(m)?.profit||0)/10000);
+    const sales=months.map(m=>(byMonth.get(m)?.sales||0)/1e8);
+    const profit=months.map(m=>(byMonth.get(m)?.profit||0)/1e8);
     const rate=sales.map((s,i)=>s?profit[i]/s*100:0);
     const firstIndex=months.findIndex(m=>byMonth.has(m));
     return {sales,rate,profit,firstIndex:firstIndex<0?months.length:firstIndex};
