@@ -526,13 +526,44 @@ function renderAccountBar() {
   document.body.prepend(bar);
 
   // 비밀번호 변경은 사이드바 "로그인 설정" 메뉴로 일원화 — 상단 바에 중복으로 안 둔다.
-  document.getElementById('mrdashLogout').addEventListener('click', async () => {
-    try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
-    sessionStorage.removeItem('mrdash_session');
-    sessionStorage.removeItem('mrdash_name');
-    clearBootCache();
-    location.reload();
-  });
+  document.getElementById('mrdashLogout').addEventListener('click', doLogout);
+}
+
+async function doLogout() {
+  try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
+  sessionStorage.removeItem('mrdash_session');
+  sessionStorage.removeItem('mrdash_name');
+  clearBootCache();
+  location.reload();
+}
+
+// 사이드바 "로그인 설정"을 누르면 바로 비밀번호 변경창으로 가지 않고,
+// 로그아웃/비밀번호 변경 중 고르는 작은 메뉴를 먼저 보여준다.
+function openLoginSettingsMenu() {
+  document.getElementById('mrdashSettingsMenu')?.remove();
+  const box = document.createElement('div');
+  box.id = 'mrdashSettingsMenu';
+  box.innerHTML = `
+    <style>
+      #mrdashSettingsMenu{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99999;
+        display:flex;align-items:center;justify-content:center;
+        font-family:system-ui,"Malgun Gothic",sans-serif}
+      #mrdashSettingsMenu .card{background:#fff;padding:20px;border-radius:10px;width:240px}
+      #mrdashSettingsMenu h3{margin:0 0 14px;font-size:15px}
+      #mrdashSettingsMenu button{width:100%;padding:10px;margin-bottom:8px;border-radius:7px;
+        font-size:13px;cursor:pointer;border:1px solid #ccc;background:#fff}
+      #mrdashSettingsMenu button:last-child{margin-bottom:0}
+      #mrdashSettingsMenu .primary{background:#1a73e8;color:#fff;border:none}
+    </style>
+    <div class="card">
+      <h3>로그인 설정</h3>
+      <button class="primary" id="mrdashGoChangePw">비밀번호 변경</button>
+      <button id="mrdashGoLogout">로그아웃</button>
+    </div>`;
+  document.body.appendChild(box);
+  box.addEventListener('click', e => { if (e.target === box) box.remove(); });
+  document.getElementById('mrdashGoChangePw').addEventListener('click', () => { box.remove(); openChangePasswordDialog(); });
+  document.getElementById('mrdashGoLogout').addEventListener('click', () => { box.remove(); doLogout(); });
 }
 
 function openChangePasswordDialog() {
@@ -602,7 +633,7 @@ function openChangePasswordDialog() {
 
 // 사이드바 "로그인 설정" 메뉴 — 원래 화면엔 이 자리가 없어서 nav에 링크 하나만 얹었다.
 // 로그인 전엔 화면 전체가 로그인창에 가려져 있어 눌릴 일이 없다.
-document.getElementById('mrdashPwNavLink')?.addEventListener('click', openChangePasswordDialog);
+document.getElementById('mrdashPwNavLink')?.addEventListener('click', openLoginSettingsMenu);
 
 /**
  * boot() 도중 예상 못한 곳에서 예외가 나면(캐시 손상, GAS 응답 이상 등) 로그인
