@@ -414,9 +414,12 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    const login = await gasCall({ action: 'loginAndBootLite', name, password });
+    let login = await gasCall({ action: 'loginAndBootLite', name, password });
+    // 드물게 ok:true인데 session이 비어 오는 응답이 관찰됐다 — 원인 불명(GAS 쪽
+    // 순간 이상)이라 코드로 재현·확정은 못 했지만, 재시도 한 번으로 보통 넘어간다.
+    if (login.ok && !login.session) login = await gasCall({ action: 'loginAndBootLite', name, password });
     if (!login.ok) { $msg.style.color = '#c62828'; $msg.textContent = login.error; return; }
-    if (!login.session) throw new Error('서버 로그인 응답이 올바르지 않습니다.');
+    if (!login.session) throw new Error('서버 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.');
 
     SESSION = login.session; ME = login.name;
     sessionStorage.setItem('mrdash_session', SESSION);
@@ -582,4 +585,28 @@ function openChangePasswordDialog() {
 // 로그인 전엔 화면 전체가 로그인창에 가려져 있어 눌릴 일이 없다.
 document.getElementById('mrdashPwNavLink')?.addEventListener('click', openChangePasswordDialog);
 
-boot();
+/**
+ * boot() 도중 예상 못한 곳에서 예외가 나면(캐시 손상, GAS 응답 이상 등) 로그인
+ * 화면도 없고 대시보드도 없는 "백지" 상태로 남을 수 있다. 일정 시간 후에도
+ * 둘 다 없으면 그냥 새로고침을 안내하는 최소한의 화면을 대신 띄운다.
+ */
+function showBootRecovery(){
+  if(document.getElementById('mrdashLogin')||document.getElementById('mrdashBootRecovery'))return;
+  if(window.TKP&&window.TKP.ready)return;
+  const box=document.createElement('div');
+  box.id='mrdashBootRecovery';
+  box.innerHTML=`<style>#mrdashBootRecovery{position:fixed;inset:0;background:#f4f4f6;z-index:99999;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+    font-family:system-ui,"Malgun Gothic",sans-serif;color:#333;text-align:center;padding:20px}
+    #mrdashBootRecovery button{padding:10px 22px;background:#1a73e8;color:#fff;border:none;
+    border-radius:7px;font-weight:600;cursor:pointer}</style>
+    <div>화면을 불러오는 데 문제가 생겼습니다.<br>새로고침해 주세요.</div>
+    <button id="mrdashBootRetry">새로고침</button>`;
+  document.body.appendChild(box);
+  document.getElementById('mrdashBootRetry').addEventListener('click',()=>location.reload());
+}
+window.addEventListener('unhandledrejection',showBootRecovery);
+window.addEventListener('error',showBootRecovery);
+setTimeout(showBootRecovery,20000);
+
+try { boot(); } catch (e) { showBootRecovery(); }
