@@ -51,6 +51,11 @@ async function gasCall(payload, attempt = 1) {
   }
 
   const isSessionRace = !body.ok && payload.session && /로그인/.test(body.error || '');
+  const isBusyLogin = !body.ok && body.retry === true;
+  if (isBusyLogin && attempt < 4) {
+    await new Promise(r => setTimeout(r, 500 * attempt));
+    return gasCall(payload, attempt + 1);
+  }
   if (isSessionRace && attempt < 4) {
     await new Promise(r => setTimeout(r, 500 * attempt));
     return gasCall(payload, attempt + 1);
