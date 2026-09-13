@@ -66,11 +66,27 @@ async function gasCall(payload, attempt = 1) {
 // ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
 
 async function applyBootPayload(r) {
-  if (!r.model?.gzip) throw new Error('서버 데이터가 준비되지 않았습니다.');
-  const compressed = Uint8Array.from(atob(r.model.gzip), c => c.charCodeAt(0));
+  let compressed, expectedHash;
+  if (r.delivery) {
+    const modelUrl = new URL(r.delivery.file, location.href);
+    modelUrl.searchParams.set('v', r.delivery.hash);
+    const modelResponse = await fetch(modelUrl, {cache:'force-cache'});
+    if (!modelResponse.ok) throw new Error('암호화 데이터 파일을 불러오지 못했습니다.');
+    const encrypted = await modelResponse.arrayBuffer();
+    const keyBytes = Uint8Array.from(atob(r.delivery.key), c => c.charCodeAt(0));
+    const iv = Uint8Array.from(atob(r.delivery.iv), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
+    compressed = new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, encrypted));
+    expectedHash = r.delivery.hash;
+  } else if (r.model?.gzip) {
+    compressed = Uint8Array.from(atob(r.model.gzip), c => c.charCodeAt(0));
+    expectedHash = r.model.hash;
+  } else {
+    throw new Error('서버 데이터가 준비되지 않았습니다.');
+  }
   const bytes = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b=>b.toString(16).padStart(2,'0')).join('');
-  if (hash !== r.model.hash) throw new Error('데이터 검증 실패');
+  if (hash !== expectedHash) throw new Error('데이터 검증 실패');
   const model=JSON.parse(new TextDecoder().decode(bytes));
   const latest = [...r.summary].map(row=>row.month).sort().pop();
   if (model.latest !== latest || model.months.length !== r.summary.length) throw new Error('자료 버전이 일치하지 않습니다. 관리자에게 문의해 주세요.');
@@ -379,7 +395,7 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    const login = await gasCall({ action: 'login', name, password });
+    const login = await gasCall({ action: 'loginAndBootLite', name, password });
     if (!login.ok) { $msg.style.color = '#c62828'; $msg.textContent = login.error; return; }
     if (!login.session) throw new Error('서버 로그인 응답이 올바르지 않습니다.');
 
@@ -388,8 +404,7 @@ async function doLogin(name, password) {
     sessionStorage.setItem('mrdash_name', ME);
 
     $msg.textContent = '데이터 불러오는 중...';
-    const r = await gasCall({ action: 'boot', session: SESSION });
-    if (!r.ok) throw new Error(r.error || '초기 데이터 로딩 실패');
+    const r = login;
 
     await applyBootPayload(r);
     finishBoot();
@@ -413,7 +428,7 @@ function finishBoot() {
 async function boot() {
   if (SESSION) {
     try {
-      const r = await gasCall({ action: 'boot', session: SESSION });
+      const r = await gasCall({ action: 'bootLite', session: SESSION });
       if (!r.ok) throw new Error(r.error);
       await applyBootPayload(r);
       finishBoot();
