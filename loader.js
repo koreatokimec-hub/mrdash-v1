@@ -337,7 +337,10 @@ async function ensureMonths(dataset, cache, globalName, months) {
   if (fresh.length) {
     const task = (async () => {
       const r = await gasCall({ action: 'data', session: SESSION, dataset, months: fresh });
-      if (!r.ok) throw new Error(r.error || `${dataset} 로딩 실패`);
+      // ok:true인데 rows가 없는(응답이 깨졌거나 잘린) 드문 경우도 방어한다 —
+      // 안 그러면 forEach에서 그대로 죽어서 "불러오기 실패: undefined
+      // forEach" 같은 원인 모를 에러로 화면에 뜬다.
+      if (!r.ok || !Array.isArray(r.rows)) throw new Error(r.error || `${dataset} 로딩 실패`);
       const byMonth = new Map(fresh.map(m => [m, []]));
       r.rows.forEach(row => byMonth.get(row.month)?.push(row));
       byMonth.forEach((rows, m) => cache.set(m, rows));
@@ -373,7 +376,7 @@ async function loadAllProblem() {
   // 받아도 이전만큼 느리진 않다. 이 전체 로딩은 챗봇 담당자 검색 때만 쓰여
   // 드물다.
   const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
-  if (!r.ok) throw new Error(r.error || 'problem 전체 로딩 실패');
+  if (!r.ok || !Array.isArray(r.rows)) throw new Error(r.error || 'problem 전체 로딩 실패');
   const rows = r.rows;
 
   const byMonth = new Map();
