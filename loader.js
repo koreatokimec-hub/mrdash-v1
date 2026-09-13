@@ -33,25 +33,28 @@ let ME = sessionStorage.getItem('mrdash_name') || '';
  * (시트 쓰기가 다른 요청에서 보이기까지의 아주 짧은 시차 때문). 이건 네트워크
  * 예외가 아니라 200 응답 안에 {ok:false} 로 담겨오므로 아래에서 따로 잡아야 한다.
  */
-async function gasCall(payload) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+async function gasCall(payload, attempt = 1) {
+  let body;
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS 사전요청(preflight) 회피
       body: JSON.stringify(payload),
-      signal: controller.signal,
     });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
-    const body = await res.json();
-    if (body.ok && ['boot','loginAndBoot'].includes(payload.action) && !body.model?.gzip)
-      throw new Error('로그인은 확인됐지만 서버 데이터가 준비되지 않았습니다. 관리자에게 모델 업로드 상태를 확인해 주세요.');
-    return body;
+    body = await res.json();
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error('서버가 30초 안에 응답하지 않았습니다. 잠시 후 다시 시도해 주세요.');
-    throw e;
-  } finally { clearTimeout(timer); }
+    if (attempt >= 4) throw e;
+    await new Promise(r => setTimeout(r, 1500));
+    return gasCall(payload, attempt + 1);
+  }
+
+  const isSessionRace = !body.ok && payload.session && /로그인/.test(body.error || '');
+  if (isSessionRace && attempt < 4) {
+    await new Promise(r => setTimeout(r, 500 * attempt));
+    return gasCall(payload, attempt + 1);
+  }
+  return body;
 }
 
 // ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
