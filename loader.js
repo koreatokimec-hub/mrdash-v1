@@ -367,11 +367,14 @@ function ensureAllProblemLoaded() {
 }
 async function loadAllProblem() {
   if (window.TKP.problemFullyLoaded) return window.TKP_PROBLEM;
-  // 점검판매 전체(2만 건 이상)를 GAS로 직접 받으면 몇 초씩 걸린다 — 메인
-  // 모델과 같은 방식으로 CDN에서 암호화 파일로 받는다. GAS는 열쇠만 준다.
-  const d = await gasCall({ action: 'problemDelivery', session: SESSION });
-  if (!d.ok) throw new Error(d.error || 'problem 전체 로딩 실패');
-  const rows = await fetchEncryptedJson(d.delivery);
+  // 전체(2만 건 이상)를 CDN 암호화 파일로 한 번에 주는 방식은 써봤지만,
+  // 로그인한 사람이면 누구나 F12로 전체 이력을 다 볼 수 있게 되는 문제가
+  // 있어 되돌렸다 — 점검판매를 월별 시트로 쪼갠 뒤로는(2026-09) GAS로 직접
+  // 받아도 이전만큼 느리진 않다. 이 전체 로딩은 챗봇 담당자 검색 때만 쓰여
+  // 드물다.
+  const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
+  if (!r.ok) throw new Error(r.error || 'problem 전체 로딩 실패');
+  const rows = r.rows;
 
   const byMonth = new Map();
   rows.forEach(row => {
