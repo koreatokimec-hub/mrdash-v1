@@ -40,6 +40,7 @@ async function gasCall(payload, attempt = 1) {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS 사전요청(preflight) 회피
       body: JSON.stringify(payload),
+      cache: 'no-store',
     });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
     body = await res.json();
