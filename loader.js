@@ -23,6 +23,25 @@ window.TKP = {
 
 let SESSION = sessionStorage.getItem('mrdash_session') || '';
 let ME = sessionStorage.getItem('mrdash_name') || '';
+const BOOT_CACHE_KEY = 'mrdash_boot_v1';
+
+function saveBootCache(payload) {
+  try {
+    sessionStorage.setItem(BOOT_CACHE_KEY, JSON.stringify({
+      session: SESSION, name: ME, delivery: payload.delivery,
+      summary: payload.summary, team: payload.team, vendor: payload.vendor || []
+    }));
+  } catch (e) { /* 저장 공간이 부족하면 기존 서버 경로를 그대로 쓴다 */ }
+}
+
+function readBootCache() {
+  try {
+    const cached=JSON.parse(sessionStorage.getItem(BOOT_CACHE_KEY)||'null');
+    return cached && cached.session===SESSION && cached.delivery && cached.summary?.length ? cached : null;
+  } catch (e) { return null; }
+}
+
+function clearBootCache() { sessionStorage.removeItem(BOOT_CACHE_KEY); }
 
 /**
  * GAS가 가끔 순간적으로 오류(404/503)를 낸다 — 몇 번 재시도한다.
@@ -407,6 +426,7 @@ async function doLogin(name, password) {
     const r = login;
 
     await applyBootPayload(r);
+    saveBootCache(r);
     finishBoot();
   } catch (e) {
     $msg.style.color = '#c62828';
@@ -427,15 +447,34 @@ function finishBoot() {
 // 세션이 만료됐으면 서버가 오류를 주므로 그때는 로그인 화면으로 되돌린다.
 async function boot() {
   if (SESSION) {
+    const cached=readBootCache();
+    if(cached){
+      try{
+        await applyBootPayload(cached);
+        finishBoot();
+        gasCall({action:'bootLite',session:SESSION}).then(r=>{
+          if(!r.ok)throw new Error(r.error||'로그인이 만료되었습니다.');
+          saveBootCache(r);
+        }).catch(()=>{
+          clearBootCache();
+          sessionStorage.removeItem('mrdash_session');
+          sessionStorage.removeItem('mrdash_name');
+          location.reload();
+        });
+        return;
+      }catch(e){ clearBootCache(); }
+    }
     try {
       const r = await gasCall({ action: 'bootLite', session: SESSION });
       if (!r.ok) throw new Error(r.error);
       await applyBootPayload(r);
+      saveBootCache(r);
       finishBoot();
       return;
     } catch (e) {
       sessionStorage.removeItem('mrdash_session');
       sessionStorage.removeItem('mrdash_name');
+      clearBootCache();
       SESSION = '';
     }
   }
@@ -470,6 +509,7 @@ function renderAccountBar() {
     try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
     sessionStorage.removeItem('mrdash_session');
     sessionStorage.removeItem('mrdash_name');
+    clearBootCache();
     location.reload();
   });
 }

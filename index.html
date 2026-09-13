@@ -354,6 +354,10 @@ body.profit-focus-open #p1 .card:not(.profit-trend-card),body.profit-focus-open 
 #problemTable th.sortable.sorted.asc::after{content:'↑';opacity:1;color:inherit}
 #problemTable th.sortable.sorted.desc::after{content:'↓';opacity:1;color:inherit}
 #customerTable th.metric-total:hover{background:color-mix(in srgb,#64748b 16%,var(--card));color:color-mix(in srgb,#64748b 82%,var(--ink))}
+.customer-pager{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 8px 2px;color:var(--muted);font-size:12px}
+.customer-pager button{border:1px solid var(--grid);background:var(--card);color:var(--ink2);border-radius:7px;padding:6px 11px;cursor:pointer}
+.customer-pager button:disabled{opacity:.35;cursor:default}
+.customer-pager .page-info{min-width:130px;text-align:center}
 #customerTable th.metric-goods:hover{background:color-mix(in srgb,#3987e5 17%,var(--card));color:color-mix(in srgb,#3987e5 82%,var(--ink))}
 #customerTable th.metric-prod:hover{background:color-mix(in srgb,#199e70 17%,var(--card));color:color-mix(in srgb,#199e70 82%,var(--ink))}
 #customerTable th.metric-etc:hover{background:color-mix(in srgb,#8b7d6b 16%,var(--card));color:color-mix(in srgb,#8b7d6b 82%,var(--ink))}
@@ -1090,6 +1094,13 @@ table.tbl td{line-height:1.4}
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+      <div class="customer-pager" id="customerPager" hidden>
+        <button type="button" data-page="first">처음</button>
+        <button type="button" data-page="prev">이전</button>
+        <span class="page-info" id="customerPageInfo"></span>
+        <button type="button" data-page="next">다음</button>
+        <button type="button" data-page="last">마지막</button>
       </div>
     </div>
   </div>
@@ -3228,6 +3239,8 @@ const CUSTOMER_PROFILES=TKP?CUSTOMER_MASTER.map(name=>({name,sales:0,rate:0}))
   :CUSTOMER_TABLE_DATA.map(d=>({name:d.name,sales:d.sales/10000,rate:customerRatio(d.profit,d.sales)??0}));
 let customerSort={key:'sales',dir:'desc'};
 let customerScope='M';
+const CUSTOMER_PAGE_SIZE=30;
+let customerPage=1;
 /* 선택된 기간(당월/당해/1년/2년/전체)에 해당하는 월 인덱스 목록 */
 function customerScopeIndices(){
   const end=activeMonthIndex??M41.length-1;
@@ -3312,6 +3325,10 @@ async function renderCustomerTable(){
     const result=typeof av==='string'?av.localeCompare(bv,'ko-KR'):(av??-Infinity)-(bv??-Infinity);
     return customerSort.dir==='asc'?result:-result;
   });
+  const totalRows=rows.length,totalPages=Math.max(1,Math.ceil(totalRows/CUSTOMER_PAGE_SIZE));
+  customerPage=Math.min(Math.max(1,customerPage),totalPages);
+  const pageStart=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+  const visibleRows=rows.slice(pageStart,pageStart+CUSTOMER_PAGE_SIZE);
   const money=v=>`${Number(v).toLocaleString('ko-KR')}만`;
   const rate=v=>v===null?'—':`${v.toFixed(1)}%`;
   const cell=(text,value)=>`<td${value<0?' class="neg"':''}>${text}</td>`;
@@ -3322,11 +3339,17 @@ async function renderCustomerTable(){
     const dir=vals[vals.length-1]>=vals[0]?'up':'down',col=dir==='up'?'var(--good)':'var(--bad)';
     return `<td class="trend-col"><svg class="row-spark" viewBox="0 0 72 26" style="color:${col}"><g fill="currentColor" stroke="currentColor">${sparkMarkup(vals,72,26,{pad:4,dotR:2})}</g></svg></td>`;
   };
-  document.querySelector('#customerTable tbody').innerHTML=rows.length?rows.map((d,i)=>`<tr data-index="${d.index}">
-    <td class="num-col">${i+1}</td><td class="l name-col">${d.name}</td>${cell(money(d.sales),d.sales)}${cell(rate(d.rate),d.rate)}${cell(money(d.profit),d.profit)}
+  document.querySelector('#customerTable tbody').innerHTML=visibleRows.length?visibleRows.map((d,i)=>`<tr data-index="${d.index}">
+    <td class="num-col">${pageStart+i+1}</td><td class="l name-col">${d.name}</td>${cell(money(d.sales),d.sales)}${cell(rate(d.rate),d.rate)}${cell(money(d.profit),d.profit)}
     ${cell(money(d.goodsSales),d.goodsSales)}${cell(rate(d.goodsRate),d.goodsRate)}${cell(money(d.goodsProfit),d.goodsProfit)}
     ${cell(money(d.prodSales),d.prodSales)}${cell(rate(d.prodRate),d.prodRate)}${cell(money(d.prodProfit),d.prodProfit)}<td class="etc-col">${money(d.etc)}</td>${trendCell(d)}</tr>`).join('')
     :'<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--muted)">조건에 맞는 거래처가 없습니다.</td></tr>';
+  const pager=document.getElementById('customerPager');
+  pager.hidden=totalRows<=CUSTOMER_PAGE_SIZE;
+  document.getElementById('customerPageInfo').textContent=`${customerPage} / ${totalPages} 페이지 · ${totalRows.toLocaleString('ko-KR')}개`;
+  pager.querySelectorAll('button').forEach(button=>{
+    button.disabled=(['first','prev'].includes(button.dataset.page)&&customerPage===1)||(['next','last'].includes(button.dataset.page)&&customerPage===totalPages);
+  });
   document.querySelectorAll('#customerTable th.sortable').forEach(th=>{
     const active=th.dataset.key===customerSort.key;
     th.classList.toggle('sorted',active);th.classList.toggle('asc',active&&customerSort.dir==='asc');th.classList.toggle('desc',active&&customerSort.dir==='desc');
@@ -3440,16 +3463,30 @@ document.getElementById('cdMonthSelect').addEventListener('change',e=>{
   renderCustomer();
 });
 function closeCustomer(){document.getElementById('customerOverlay').classList.remove('on');document.body.style.overflow='';hideTip()}
-document.getElementById('customerFilters').addEventListener('input',renderCustomerTable);
+let customerFilterTimer=null;
+document.getElementById('customerFilters').addEventListener('input',()=>{
+  customerPage=1;
+  clearTimeout(customerFilterTimer);
+  customerFilterTimer=setTimeout(renderCustomerTable,180);
+});
+document.getElementById('customerPager').addEventListener('click',e=>{
+  const button=e.target.closest('button[data-page]');if(!button||button.disabled)return;
+  if(button.dataset.page==='first')customerPage=1;
+  else if(button.dataset.page==='prev')customerPage--;
+  else if(button.dataset.page==='next')customerPage++;
+  else if(button.dataset.page==='last')customerPage=Number(document.getElementById('customerPageInfo').textContent.split('/')[1])||customerPage;
+  renderCustomerTable();
+  document.getElementById('customerStickyTools').scrollIntoView({block:'start'});
+});
 document.getElementById('customerFilterReset').addEventListener('click',()=>{
   document.querySelectorAll('#customerFilters input').forEach(input=>input.value='');
-  customerSort={key:'sales',dir:'desc'};renderCustomerTable();
+  customerSort={key:'sales',dir:'desc'};customerPage=1;renderCustomerTable();
 });
 document.querySelector('#customerTable thead').addEventListener('click',e=>{
   const th=e.target.closest('th.sortable');if(!th)return;
   if(customerSort.key===th.dataset.key)customerSort.dir=customerSort.dir==='asc'?'desc':'asc';
   else customerSort={key:th.dataset.key,dir:th.dataset.key==='name'?'asc':'desc'};
-  renderCustomerTable();
+  customerPage=1;renderCustomerTable();
 });
 function updateCustomerScopeNote(){
   const idx=activeMonthIndex??M41.length-1,month=+M41[idx].split('.')[1],note=document.getElementById('customerScopeRange');
@@ -3461,6 +3498,7 @@ function updateCustomerScopeNote(){
 document.getElementById('customerScope').addEventListener('click',e=>{
   const b=e.target.closest('button[data-scope]');if(!b)return;
   customerScope=b.dataset.scope;
+  customerPage=1;
   document.querySelectorAll('#customerScope button').forEach(x=>x.classList.toggle('on',x===b));
   updateCustomerScopeNote();
   renderCustomerTable();
