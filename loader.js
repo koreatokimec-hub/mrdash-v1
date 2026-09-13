@@ -49,7 +49,7 @@ async function gasCall(payload, attempt = 1) {
     return gasCall(payload, attempt + 1);
   }
 
-  const isSessionRace = !body.ok && payload.session && /로그인/.test(body.error || '');
+  const isSessionRace = false && !body.ok && payload.session && /로그인/.test(body.error || '');
   if (isSessionRace && attempt < 4) {
     await new Promise(r => setTimeout(r, 500 * attempt));
     return gasCall(payload, attempt + 1);
@@ -59,15 +59,20 @@ async function gasCall(payload, attempt = 1) {
 
 // ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
 
-function applyBootPayload(r) {
+async function applyBootPayload(r) {
+  if (!r.model?.gzip) throw new Error('서버 데이터가 준비되지 않았습니다.');
+  const compressed = Uint8Array.from(atob(r.model.gzip), c => c.charCodeAt(0));
+  const bytes = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b=>b.toString(16).padStart(2,'0')).join('');
+  if (hash !== r.model.hash) throw new Error('데이터 검증 실패');
+  const model=JSON.parse(new TextDecoder().decode(bytes));
+  const latest = [...r.summary].map(row=>row.month).sort().pop();
+  if (model.latest !== latest || model.months.length !== r.summary.length) throw new Error('자료 버전이 일치하지 않습니다. 관리자에게 문의해 주세요.');
+  window.TKP_MODEL=model;
+  window.TKP_MODEL_HASH=hash;
   window.TKP.team = r.team; window.TKP_TEAM = r.team;
   window.TKP.vendor = r.vendor; window.TKP_VENDOR = r.vendor;
   window.TKP.summary = r.summary; window.TKP_SUMMARY = r.summary;
-  patchModelWithLiveSummary(r.summary);
-  patchTeamsSnapshot(r.team); // teamSeries보다 먼저 — TEAMS(=M.teams)가 이름 기준이 된다
-  patchTeamSeries(r.team);
-  patchBuSnapshot(r.team);
-  padStaleArraysToCurrentLength(); // 아직 못 갱신한 필드들이 죽지 않게 최소한의 방어
 }
 
 /**
@@ -262,31 +267,6 @@ function patchTeamsSnapshot(teamRows) {
  * 복제해 채운다. 주의: 이러면 그 화면들의 "최신월" 값은 실제 최신이 아니라
  * 직전에 있던 값의 반복이다 — 부정확할 수 있다는 뜻이지, 실제 데이터가 아니다.
  */
-function padStaleArraysToCurrentLength() {
-  const M = window.TKP_MODEL;
-  if (!M) return;
-  const target = M.months.length;
-
-  const padArray = arr => {
-    if (!Array.isArray(arr) || !arr.length) return arr;
-    while (arr.length < target) arr.push(arr[arr.length - 1]);
-    return arr;
-  };
-
-  Object.values(M.teamSeries || {}).forEach(s => {
-    padArray(s.loss); padArray(s.high18Share); padArray(s.bandProfit);
-  });
-  Object.values(M.customerHistory || {}).forEach(h => {
-    padArray(h.sales); padArray(h.profit); padArray(h.rate);
-  });
-  Object.values(M.itemHistory || {}).forEach(h => {
-    padArray(h.sales); padArray(h.profit); padArray(h.rate);
-  });
-  // bandTeamSeries/YtdSeries 는 {팀명: [월별 배열]} 형태의 객체다 (배열이 아니다)
-  Object.values(M.bandTeamSeries || {}).forEach(padArray);
-  Object.values(M.bandTeamYtdSeries || {}).forEach(padArray);
-}
-
 // ── 지연 로딩 (거래처 / 팀품목 / 점검판매) ──────────────────
 //
 // 셋 다 같은 모양이라 함수 하나로 공유한다: 없는 달만 서버에 물어보고,
@@ -399,7 +379,7 @@ async function doLogin(name, password) {
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
 
-    applyBootPayload(r);
+    await applyBootPayload(r);
     finishBoot();
   } catch (e) {
     $msg.style.color = '#c62828';
@@ -423,7 +403,7 @@ async function boot() {
     try {
       const r = await gasCall({ action: 'boot', session: SESSION });
       if (!r.ok) throw new Error(r.error);
-      applyBootPayload(r);
+      await applyBootPayload(r);
       finishBoot();
       return;
     } catch (e) {
@@ -519,8 +499,10 @@ function openChangePasswordDialog() {
     try {
       const r = await gasCall({ action: 'changePassword', session: SESSION, oldPassword, newPassword });
       if (!r.ok) { $('pwMsg').style.color = '#c62828'; $('pwMsg').textContent = r.error; return; }
-      alert('비밀번호가 변경되었습니다.');
-      box.remove();
+      sessionStorage.removeItem('mrdash_session');
+      sessionStorage.removeItem('mrdash_name');
+      alert('비밀번호가 변경되었습니다. 다시 로그인해 주세요.');
+      location.reload();
     } catch (e) {
       $('pwMsg').style.color = '#c62828';
       $('pwMsg').textContent = '연결 실패: ' + e.message;
