@@ -33,36 +33,25 @@ let ME = sessionStorage.getItem('mrdash_name') || '';
  * (시트 쓰기가 다른 요청에서 보이기까지의 아주 짧은 시차 때문). 이건 네트워크
  * 예외가 아니라 200 응답 안에 {ok:false} 로 담겨오므로 아래에서 따로 잡아야 한다.
  */
-async function gasCall(payload, attempt = 1) {
-  let body;
+async function gasCall(payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS 사전요청(preflight) 회피
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
-    body = await res.json();
+    const body = await res.json();
+    if (body.ok && ['boot','loginAndBoot'].includes(payload.action) && !body.model?.gzip)
+      throw new Error('로그인은 확인됐지만 서버 데이터가 준비되지 않았습니다. 관리자에게 모델 업로드 상태를 확인해 주세요.');
+    return body;
   } catch (e) {
-    if (attempt >= 4) throw e;
-    await new Promise(r => setTimeout(r, 1500));
-    return gasCall(payload, attempt + 1);
-  }
-
-  const isSessionRace = false && !body.ok && payload.session && /로그인/.test(body.error || '');
-  if (isSessionRace && attempt < 4) {
-    await new Promise(r => setTimeout(r, 500 * attempt));
-    return gasCall(payload, attempt + 1);
-  }
-
-  // boot/loginAndBoot는 성공(ok:true)해도 시트 읽기가 순간적으로 실패해 model이
-  // 비어 올 때가 있다 — 재로그인이 아니라 같은 요청을 한 번 더 시도해본다.
-  const needsModel = payload.action === 'boot' || payload.action === 'loginAndBoot';
-  if (needsModel && body.ok && !body.model?.gzip && attempt < 3) {
-    await new Promise(r => setTimeout(r, 800 * attempt));
-    return gasCall(payload, attempt + 1);
-  }
-  return body;
+    if (e.name === 'AbortError') throw new Error('서버가 30초 안에 응답하지 않았습니다. 잠시 후 다시 시도해 주세요.');
+    throw e;
+  } finally { clearTimeout(timer); }
 }
 
 // ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
@@ -373,6 +362,7 @@ function renderLoginScreen() {
 
 async function doLogin(name, password) {
   const $btn = document.getElementById('mrdashBtn');
+  if ($btn.disabled) return;
   const $msg = document.getElementById('mrdashMsg');
   if (!name || !password) { $msg.textContent = '이름과 비밀번호를 입력하세요'; return; }
 
@@ -380,14 +370,17 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    const r = await gasCall({ action: 'loginAndBoot', name, password });
+    const r = await gasCall({ action: 'login', name, password });
     if (!r.ok) { $msg.style.color = '#c62828'; $msg.textContent = r.error; return; }
 
     SESSION = r.session; ME = r.name;
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
 
-    await applyBootPayload(r);
+    $msg.textContent = '로그인 성공 · 데이터를 불러오는 중…';
+    const data = await gasCall({ action: 'boot', session: SESSION });
+    if (!data.ok) throw new Error(data.error || '데이터 조회 실패');
+    await applyBootPayload(data);
     finishBoot();
   } catch (e) {
     $msg.style.color = '#c62828';
