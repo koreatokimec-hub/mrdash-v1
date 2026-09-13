@@ -3542,6 +3542,17 @@ const productEndIndex={sales:null,rate:null,profit:null};
  */
 async function productSeries(row){
   if(TKP){
+    const months=TKP.months;
+    // itemHistory는 메인 모델(CDN, 로그인 때 이미 받아둠)에 매달 빌드 시점에
+    // 미리 계산돼 들어있다 — 이걸 쓰면 점검판매 2만 건 전체를 다시 훑는
+    // ensureAllProblemLoaded() 없이 즉시 그릴 수 있다(팀상세만큼 빨라짐).
+    const history=window.TKP_MODEL?.itemHistory?.[row.item];
+    if(history?.sales?.length===months.length){
+      const sales=history.sales,profit=history.profit,rate=history.rate||sales.map((s,i)=>s?profit[i]/s*100:0);
+      const firstIndex=sales.findIndex(v=>v);
+      return {sales,rate,profit,firstIndex:firstIndex<0?months.length:firstIndex};
+    }
+    // itemHistory에 없는 드문 경우만 예외적으로 점검판매 전체를 받아 직접 집계한다.
     await ensureAllProblemLoaded();
     const byMonth=new Map();
     (window.TKP_PROBLEM||[]).forEach(r=>{
@@ -3553,7 +3564,6 @@ async function productSeries(row){
     // series.sales/profit은 다른 곳(teamSeries 등)과 마찬가지로 "억원" 단위여야 한다
     // (화면이 이 값에 *100을 곱해 백만원으로 바꾸는 공식을 그대로 쓰기 때문).
     // 원본 problem.sales/profit은 "원" 단위이므로 1e8로 나눈다.
-    const months=TKP.months;
     const sales=months.map(m=>(byMonth.get(m)?.sales||0)/1e8);
     const profit=months.map(m=>(byMonth.get(m)?.profit||0)/1e8);
     const rate=sales.map((s,i)=>s?profit[i]/s*100:0);
