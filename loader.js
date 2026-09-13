@@ -528,15 +528,16 @@ function openLoginSettingsMenu() {
         display:flex;align-items:center;justify-content:center;
         font-family:system-ui,"Malgun Gothic",sans-serif}
       #mrdashSettingsMenu .card{background:#fff;padding:20px;border-radius:10px;width:240px}
-      #mrdashSettingsMenu h3{margin:0 0 14px;font-size:15px}
+      #mrdashSettingsMenu h3{margin:0 0 4px;font-size:15px}
+      #mrdashSettingsMenu .who{margin:0 0 14px;font-size:12px;color:#666}
       #mrdashSettingsMenu button{width:100%;padding:10px;margin-bottom:8px;border-radius:7px;
         font-size:13px;cursor:pointer;border:1px solid #ccc;background:#fff}
       #mrdashSettingsMenu button:last-child{margin-bottom:0}
-      #mrdashSettingsMenu .primary{background:#1a73e8;color:#fff;border:none}
     </style>
     <div class="card">
       <h3>로그인 설정</h3>
-      <button class="primary" id="mrdashGoChangePw">비밀번호 변경</button>
+      <p class="who">${ME} 님으로 로그인됨</p>
+      <button id="mrdashGoChangePw">비밀번호 변경</button>
       <button id="mrdashGoLogout">로그아웃</button>
     </div>`;
   document.body.appendChild(box);
