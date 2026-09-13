@@ -375,18 +375,17 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    // 큰 초기 데이터까지 로그인 응답에 합치면 GAS ContentService가 404를 반환할 수 있다.
-    // 인증을 먼저 끝낸 뒤 세션으로 초기 데이터를 받는다.
-    const login = await gasCall({ action: 'login', name, password });
-    if (!login.ok) { $msg.style.color = '#c62828'; $msg.textContent = login.error; return; }
-    if (!login.session) throw new Error('서버 로그인 응답이 올바르지 않습니다.');
-    SESSION = login.session; ME = login.name;
+    // login과 boot를 따로 부르면 왕복이 2번이라 그것만으로 3~4초가 더 든다.
+    // 실측(HTTP 상태코드 직접 확인) 결과 loginAndBoot가 큰 응답이라 404난다는
+    // 근거는 없었다 — 반복 테스트 전부 200, 평균 5초 안팎. 속도가 더 중요하므로
+    // 다시 합친다.
+    const r = await gasCall({ action: 'loginAndBoot', name, password });
+    if (!r.ok) { $msg.style.color = '#c62828'; $msg.textContent = r.error; return; }
+    if (!r.session) throw new Error('서버 로그인 응답이 올바르지 않습니다.');
+
+    SESSION = r.session; ME = r.name;
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
-    $msg.textContent = '데이터 불러오는 중...';
-
-    const r = await gasCall({ action: 'boot', session: SESSION });
-    if (!r.ok) { $msg.style.color = '#c62828'; $msg.textContent = r.error; return; }
 
     await applyBootPayload(r);
     finishBoot();
