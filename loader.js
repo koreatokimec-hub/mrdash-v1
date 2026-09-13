@@ -370,17 +370,16 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    const r = await gasCall({ action: 'login', name, password });
+    // login과 boot를 따로 부르면 왕복이 2번이라 그것만으로 3~4초가 더 든다.
+    // 실패 시 원인(로그인/데이터) 구분보다 속도가 더 중요하다고 판단해 다시 합친다.
+    const r = await gasCall({ action: 'loginAndBoot', name, password });
     if (!r.ok) { $msg.style.color = '#c62828'; $msg.textContent = r.error; return; }
 
     SESSION = r.session; ME = r.name;
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
 
-    $msg.textContent = '로그인 성공 · 데이터를 불러오는 중…';
-    const data = await gasCall({ action: 'boot', session: SESSION });
-    if (!data.ok) throw new Error(data.error || '데이터 조회 실패');
-    await applyBootPayload(data);
+    await applyBootPayload(r);
     finishBoot();
   } catch (e) {
     $msg.style.color = '#c62828';
