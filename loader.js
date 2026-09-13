@@ -84,29 +84,42 @@ async function gasCall(payload, attempt = 1) {
 
 // ── 초기 화면에 필요한 작은 데이터(요약/팀/거래처점검) ──────
 
+/**
+ * GAS가 아니라 GitHub Pages(CDN)에서 암호화된 JSON을 받아온다. 키/iv는 로그인한
+ * 사람에게만 GAS가 내려주고, 실제 큰 데이터 본체는 CDN이 서빙한다 — GAS는
+ * "누구인지 확인 + 열쇠 전달"만 하고 무거운 전송은 안 맡는다는 게 핵심이다.
+ * 메인 모델과 점검판매 전체이력 둘 다 이 함수를 같이 쓴다.
+ */
+async function fetchEncryptedJson(delivery){
+  const url = new URL(delivery.file, location.href);
+  url.searchParams.set('v', delivery.hash);
+  const response = await fetch(url, {cache:'force-cache'});
+  if (!response.ok) throw new Error('암호화 데이터 파일을 불러오지 못했습니다.');
+  const encrypted = await response.arrayBuffer();
+  const keyBytes = Uint8Array.from(atob(delivery.key), c => c.charCodeAt(0));
+  const iv = Uint8Array.from(atob(delivery.iv), c => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
+  const compressed = new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, encrypted));
+  const bytes = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b=>b.toString(16).padStart(2,'0')).join('');
+  if (hash !== delivery.hash) throw new Error('데이터 검증 실패');
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 async function applyBootPayload(r) {
-  let compressed, expectedHash;
+  let model, hash;
   if (r.delivery) {
-    const modelUrl = new URL(r.delivery.file, location.href);
-    modelUrl.searchParams.set('v', r.delivery.hash);
-    const modelResponse = await fetch(modelUrl, {cache:'force-cache'});
-    if (!modelResponse.ok) throw new Error('암호화 데이터 파일을 불러오지 못했습니다.');
-    const encrypted = await modelResponse.arrayBuffer();
-    const keyBytes = Uint8Array.from(atob(r.delivery.key), c => c.charCodeAt(0));
-    const iv = Uint8Array.from(atob(r.delivery.iv), c => c.charCodeAt(0));
-    const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
-    compressed = new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, encrypted));
-    expectedHash = r.delivery.hash;
+    model = await fetchEncryptedJson(r.delivery);
+    hash = r.delivery.hash;
   } else if (r.model?.gzip) {
-    compressed = Uint8Array.from(atob(r.model.gzip), c => c.charCodeAt(0));
-    expectedHash = r.model.hash;
+    const compressed = Uint8Array.from(atob(r.model.gzip), c => c.charCodeAt(0));
+    const bytes = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b=>b.toString(16).padStart(2,'0')).join('');
+    if (hash !== r.model.hash) throw new Error('데이터 검증 실패');
+    model = JSON.parse(new TextDecoder().decode(bytes));
   } else {
     throw new Error('서버 데이터가 준비되지 않았습니다.');
   }
-  const bytes = await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b=>b.toString(16).padStart(2,'0')).join('');
-  if (hash !== expectedHash) throw new Error('데이터 검증 실패');
-  const model=JSON.parse(new TextDecoder().decode(bytes));
   const latest = [...r.summary].map(row=>row.month).sort().pop();
   if (model.latest !== latest || model.months.length !== r.summary.length) throw new Error('자료 버전이 일치하지 않습니다. 관리자에게 문의해 주세요.');
   window.TKP_MODEL=model;
@@ -354,19 +367,22 @@ function ensureAllProblemLoaded() {
 }
 async function loadAllProblem() {
   if (window.TKP.problemFullyLoaded) return window.TKP_PROBLEM;
-  const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
-  if (!r.ok) throw new Error(r.error || 'problem 전체 로딩 실패');
+  // 점검판매 전체(2만 건 이상)를 GAS로 직접 받으면 몇 초씩 걸린다 — 메인
+  // 모델과 같은 방식으로 CDN에서 암호화 파일로 받는다. GAS는 열쇠만 준다.
+  const d = await gasCall({ action: 'problemDelivery', session: SESSION });
+  if (!d.ok) throw new Error(d.error || 'problem 전체 로딩 실패');
+  const rows = await fetchEncryptedJson(d.delivery);
 
   const byMonth = new Map();
-  r.rows.forEach(row => {
+  rows.forEach(row => {
     if (!byMonth.has(row.month)) byMonth.set(row.month, []);
     byMonth.get(row.month).push(row);
   });
-  byMonth.forEach((rows, m) => window.TKP.problemCache.set(m, rows));
+  byMonth.forEach((monthRows, m) => window.TKP.problemCache.set(m, monthRows));
 
-  window.TKP_PROBLEM = r.rows;
+  window.TKP_PROBLEM = rows;
   window.TKP.problemFullyLoaded = true;
-  return r.rows;
+  return rows;
 }
 
 // ── 로그인 화면 ──────────────────────────────────────────
