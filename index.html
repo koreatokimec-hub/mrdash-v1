@@ -2597,7 +2597,9 @@ function tBarChart(id,labels,vals,color,unit,opts){
     const h=(H-pad.t-pad.b)*v/max;
     const y=pad.t+(H-pad.t-pad.b)-h;
     tops.push([x+bw/2,y]);
-    g+=`<rect class="grow gbar" style="animation-delay:${i*14}ms" x="${x}" y="${y}" width="${bw}" height="${h}" rx="3" fill="url(#${gradId})"/>`;
+    g+=opts.animate===false
+      ?`<rect class="gbar" x="${x}" y="${y}" width="${bw}" height="${h}" rx="3" fill="url(#${gradId})"/>`
+      :`<rect class="grow gbar" style="animation-delay:${i*14}ms" x="${x}" y="${y}" width="${bw}" height="${h}" rx="3" fill="url(#${gradId})"/>`;
     const nm=labels[i].includes('Q')?'20'+labels[i]:'20'+labels[i]+'월';
     const dv=i>0?+(v-vals[i-1]).toFixed(2):null;
     tips.push(`<b>${nm}</b>${opts.name||''} ${formatValue(v)}${unit}`
@@ -2615,7 +2617,7 @@ function tBarChart(id,labels,vals,color,unit,opts){
   }
   svg.innerHTML=g;
   bindTips(svg,'gbar',tips);
-  if(opts.line) animateLines(svg,large?1.6:.8);
+  if(opts.line && opts.animate!==false) animateLines(svg,large?1.6:.8);
 }
 
 /* 범용 라인 (그리기 애니메이션 + 분기 % 라벨) */
@@ -2893,7 +2895,7 @@ function renderTeam(only=null){
     const p=periodInfo('sales');
     const [salesLabels,salesVals]=applyMode(ts.sales,teamDetailModes.sales,'sum',curGrain,p.end);
     const [,salesRates]=applyMode(ts.rate,teamDetailModes.sales,'avg',curGrain,p.end);
-    tBarChart('tSales',salesLabels,salesVals,'var(--s1)','억',{line:true,valueLabels:true,labelUnit:'억',name:'매출',largeText:true,sparseLabels:isLongMode(teamDetailModes.sales),decimals:1,
+    tBarChart('tSales',salesLabels,salesVals,'var(--s1)','억',{line:true,valueLabels:true,labelUnit:'억',name:'매출',largeText:true,sparseLabels:isLongMode(teamDetailModes.sales),decimals:1,animate:false,
       extra:i=>`<br><span>이익률 ${salesRates[i].toFixed(1)}%</span>`});
     const totalEl=document.getElementById('tSalesTotal');if(totalEl)totalEl.textContent=`${p.txt} 합계 ${sum(ts.sales,p.yearStart,p.end).toFixed(1)}억`;
   }
@@ -2904,7 +2906,7 @@ function renderTeam(only=null){
     const profitName=teamProfitMetric==='goods'?'상품 이익액':teamProfitMetric==='product'?'제품 이익액':'전체 이익액';
     const profitColor=teamProfitMetric==='product'?'var(--sales-finished)':teamProfitMetric==='goods'?'var(--sales-product)':'var(--s1)';
     const [profitLabels,profitVals]=applyMode(profitSource,teamDetailModes.profit,'sum',curGrain,p.end);
-    tBarChart('tProfit',profitLabels,profitVals,profitColor,'억',{line:true,valueLabels:true,labelUnit:'억',name:profitName,largeText:true,sparseLabels:isLongMode(teamDetailModes.profit),decimals:2});
+    tBarChart('tProfit',profitLabels,profitVals,profitColor,'억',{line:true,valueLabels:true,labelUnit:'억',name:profitName,largeText:true,sparseLabels:isLongMode(teamDetailModes.profit),decimals:2,animate:false});
     const totalEl=document.getElementById('tProfitTotal');if(totalEl)totalEl.textContent=`${p.txt} 합계 ${sum(profitSource,p.yearStart,p.end).toFixed(2)}억`;
   }
 
@@ -3595,7 +3597,7 @@ async function renderProductGraph(key){
   const periodTxt=`${year}년 1~${month}월 합계`;
   if(key==='sales'){
     const [labels,rawValues]=productApply(series,'sales',productModes.sales,'sum',end),values=rawValues.map(v=>round1(v*100));
-    tBarChart('pdSales',labels,values,'var(--s2)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(productModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,gradientColors:['#0f6ba8','#5cd0e8']});
+    tBarChart('pdSales',labels,values,'var(--s2)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(productModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,gradientColors:['#0f6ba8','#5cd0e8'],animate:false});
     const totalEl=document.getElementById('pdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.sales,yearStart,end)*100)}백만원`;
   }else if(key==='rate'){
     const [labels,values]=productApply(series,'rate',productModes.rate,'avg',end),negative=values[values.length-1]<0;
@@ -3604,7 +3606,7 @@ async function renderProductGraph(key){
     const totalEl=document.getElementById('pdRateTotal');if(totalEl)totalEl.textContent=`${periodTxt.replace('합계','평균')} ${r.toFixed(1)}%`;
   }else{
     const [labels,rawValues]=productApply(series,'profit',productModes.profit,'sum',end),values=rawValues.map(v=>round1(v*100)),negative=values[values.length-1]<0;
-    customerLineChart('pdProfit',labels,values,negative?'var(--bad)':'var(--s1)','백만원',negative?'손실액':'이익액',{sparseLabels:isLongMode(productModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,emphasizeNegative:true,decimals:1,axisDecimals:1});
+    customerLineChart('pdProfit',labels,values,negative?'var(--bad)':'var(--s1)','백만원',negative?'손실액':'이익액',{sparseLabels:isLongMode(productModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,emphasizeNegative:true,decimals:1,axisDecimals:1,animate:false});
     const totalEl=document.getElementById('pdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.profit,yearStart,end)*100)}백만원`;
   }
 }
