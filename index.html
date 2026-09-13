@@ -1517,13 +1517,23 @@ if(TKP){
 const tip=document.getElementById('tip');
 const round1=value=>{const n=Number(value);return Math.sign(n)*Math.round((Math.abs(n)+Number.EPSILON)*10)/10};
 const fmtRound1=value=>round1(value).toFixed(1);
-function showTip(ev,html,large=false){tip.classList.toggle('large',large);tip.innerHTML=html;tip.style.display='block';moveTip(ev)}
-function moveTip(ev){
-  const w=tip.offsetWidth,h=tip.offsetHeight;
+// 크기는 내용이 바뀔 때(showTip)만 다시 재고, moveTip은 그 값을 재사용한다.
+// 전에는 마우스가 1픽셀만 움직여도 매번 offsetWidth/offsetHeight를 읽어
+// 강제로 레이아웃을 다시 계산했다 — 차트 위에서 마우스를 움직일 때마다
+// 버벅이던("출렁거리던") 원인 중 하나였다.
+let tipW=0,tipH=0,tipMoveQueued=false,tipPendingEvent=null;
+function showTip(ev,html,large=false){tip.classList.toggle('large',large);tip.innerHTML=html;tip.style.display='block';tipW=tip.offsetWidth;tipH=tip.offsetHeight;positionTip(ev)}
+function positionTip(ev){
   let x=ev.clientX+16,y=ev.clientY+16;
-  if(x+w>window.innerWidth-10)x=ev.clientX-w-14;
-  if(y+h>window.innerHeight-10)y=ev.clientY-h-14;
+  if(x+tipW>window.innerWidth-10)x=ev.clientX-tipW-14;
+  if(y+tipH>window.innerHeight-10)y=ev.clientY-tipH-14;
   tip.style.left=x+'px';tip.style.top=y+'px';
+}
+function moveTip(ev){
+  tipPendingEvent=ev;
+  if(tipMoveQueued)return;
+  tipMoveQueued=true;
+  requestAnimationFrame(()=>{tipMoveQueued=false;if(tipPendingEvent)positionTip(tipPendingEvent)});
 }
 function hideTip(){tip.style.display='none'}
 /* 인라인 속성 대신 프로그램 방식으로 툴팁을 붙인다 (따옴표 깨짐 방지) */
@@ -3142,8 +3152,15 @@ async function renderProblemSales(){
   const mySeq=++problemRenderSeq;
   const tbody=document.querySelector('#problemTable tbody');
   if(tbody)tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted)">불러오는 중…</td></tr>';
-  await refreshProblemOptions();
-  let rows=await problemRowsForSelection(problemType);
+  let rows;
+  try{
+    await refreshProblemOptions();
+    rows=await problemRowsForSelection(problemType);
+  }catch(e){
+    if(mySeq!==problemRenderSeq)return;
+    if(tbody)tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--bad)">불러오지 못했습니다: ${e.message||'서버 오류'} · <a href="javascript:void(0)" onclick="renderProblemSales()">다시 시도</a></td></tr>`;
+    return;
+  }
   if(mySeq!==problemRenderSeq)return; // 더 최신 요청이 진행 중이면 이 결과는 버린다
   const q=problemSearchText.trim().toLowerCase();
   if(q)rows=rows.filter(r=>[r.item,r.itemCode,r.vendor].some(v=>String(v||'').toLowerCase().includes(q)));

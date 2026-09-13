@@ -500,11 +500,10 @@ function renderAccountBar() {
       body{margin-top:26px !important}
     </style>
     <span>${ME} 님</span>
-    <button id="mrdashChangePw">비밀번호 변경</button>
     <button id="mrdashLogout">로그아웃</button>`;
   document.body.prepend(bar);
 
-  document.getElementById('mrdashChangePw').addEventListener('click', openChangePasswordDialog);
+  // 비밀번호 변경은 사이드바 "로그인 설정" 메뉴로 일원화 — 상단 바에 중복으로 안 둔다.
   document.getElementById('mrdashLogout').addEventListener('click', async () => {
     try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
     sessionStorage.removeItem('mrdash_session');
