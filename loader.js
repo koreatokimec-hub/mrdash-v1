@@ -41,8 +41,7 @@ async function gasCall(payload) {
     // 같은 URL에서 겹치면 이전 GET 응답을 돌려주는 경우가 있다.
     // 로그인·데이터·AI 요청마다 URL을 구분해 잘못된 캐시 응답을 막는다.
     const separator = GAS_URL.includes('?') ? '&' : '?';
-    const requestUrl = GAS_URL + separator + 'request=' + Date.now()
-      + '-' + Math.random().toString(36).slice(2);
+    const requestUrl = GAS_URL + separator + 'api=1';
     const res = await fetch(requestUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
