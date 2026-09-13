@@ -2415,7 +2415,11 @@ function renderBandTeamDonut(rows){
   });
   svg.innerHTML=g;
   bindTips(svg,'donut-arc',tips);
-  animateDonutClip(svg,cx,cy,R+8,900);
+  // 12시에서 시계방향으로 매 프레임 클립을 다시 계산하며 도넛을 그려내는
+  // 등장 애니메이션이 있었는데, 매번 900ms 동안 프레임마다 재계산해서
+  // 버벅임의 원인이었다 — 바로 전체 원을 보여주는 걸로 대체한다.
+  const clipShape=svg.querySelector('.donut-clip-shape'),bigR=R+8;
+  if(clipShape)clipShape.setAttribute('d',`M${cx-bigR},${cy} a${bigR},${bigR} 0 1,0 ${bigR*2},0 a${bigR},${bigR} 0 1,0 ${-bigR*2},0 Z`);
 }
 /* 도넛 등장 애니메이션: 12시에서 시계방향으로 파이 모양 클립이 점점 커지며 전체 도넛을 드러낸다 */
 function animateDonutClip(svg,cx,cy,bigR,duration){
@@ -3437,7 +3441,7 @@ function renderCustomerGraph(key){
   const periodTxt=`${year}년 1~${month}월 합계`;
   if(key==='sales'){
     const [labels,rawValues]=applyMode(series.sales,customerModes.sales,'sum','M',end),values=rawValues.map(value=>round1(value*100));
-    tBarChart('cdSales',labels,values,'var(--s1)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(customerModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1});
+    tBarChart('cdSales',labels,values,'var(--s1)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(customerModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,animate:false});
     const totalEl=document.getElementById('cdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.sales,yearStart,end)*100)}백만원`;
   }else if(key==='rate'){
     const [labels,values]=applyMode(series.rate,customerModes.rate,'avg','M',end);
@@ -3446,7 +3450,7 @@ function renderCustomerGraph(key){
     const totalEl=document.getElementById('cdRateTotal');if(totalEl)totalEl.textContent=`${periodTxt.replace('합계','평균')} ${r.toFixed(1)}%`;
   }else{
     const [labels,rawValues]=applyMode(series.profit,customerModes.profit,'sum','M',end),values=rawValues.map(value=>round1(value*100));
-    customerLineChart('cdProfit',labels,values,values[values.length-1]>=0?'var(--s1)':'var(--bad)','백만원','이익액',{sparseLabels:isLongMode(customerModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1});
+    customerLineChart('cdProfit',labels,values,values[values.length-1]>=0?'var(--s1)':'var(--bad)','백만원','이익액',{sparseLabels:isLongMode(customerModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,animate:false});
     const totalEl=document.getElementById('cdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.profit,yearStart,end)*100)}백만원`;
   }
 }
