@@ -54,6 +54,14 @@ async function gasCall(payload, attempt = 1) {
     await new Promise(r => setTimeout(r, 500 * attempt));
     return gasCall(payload, attempt + 1);
   }
+
+  // boot/loginAndBoot는 성공(ok:true)해도 시트 읽기가 순간적으로 실패해 model이
+  // 비어 올 때가 있다 — 재로그인이 아니라 같은 요청을 한 번 더 시도해본다.
+  const needsModel = payload.action === 'boot' || payload.action === 'loginAndBoot';
+  if (needsModel && body.ok && !body.model?.gzip && attempt < 3) {
+    await new Promise(r => setTimeout(r, 800 * attempt));
+    return gasCall(payload, attempt + 1);
+  }
   return body;
 }
 
@@ -428,7 +436,7 @@ function renderAccountBar() {
         display:flex;justify-content:flex-end;align-items:center;gap:10px;
         padding:5px 14px;background:#1a1a1a;color:#ddd;font-size:12px;
         font-family:system-ui,"Malgun Gothic",sans-serif}
-      #mrdashAccountBar button{background:none;border:1px solid #555;color:#ddd;
+      #mrdashAccountBar button{background:none;border:none;color:#ddd;
         border-radius:5px;padding:2px 9px;font-size:11.5px;cursor:pointer}
       #mrdashAccountBar button:hover{background:#333}
       body{margin-top:26px !important}

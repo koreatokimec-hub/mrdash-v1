@@ -4182,12 +4182,12 @@ document.getElementById('monthSelect').addEventListener('change',e=>{
 .rag-compose-tools{display:flex;align-items:center;gap:8px;margin-top:9px}.rag-hint{margin-left:auto;color:var(--muted);font-size:11px;text-align:right}
 @media(max-width:760px){.rag-launch{right:14px;bottom:14px}.tkp-natural-drawer{top:8px!important;right:8px!important;bottom:8px!important;left:auto!important;width:calc(100vw - 16px)!important;min-width:0!important;max-width:none!important;height:auto!important}.rag-start-grid{grid-template-columns:1fr}.rag-body{padding:15px}.rag-assistant-card{width:100%;padding:15px}.rag-user-pill{max-width:88%}.rag-kpis{grid-template-columns:1fr}.rag-hint{display:none}}
 </style>
-<!-- AX_챗봇: 서버 API 중계기(Gemini 키 보호용)가 아직 없어 배포 산출물에서는 숨김. 코드는 test-손익대시보드에서 계속 유지·검증 중. 중계기 준비되면 hidden 속성만 제거하면 됨. -->
-<button class="rag-launch" id="ragLaunch" type="button" hidden>⌕ AX_챗봇</button>
+<!-- AX_챗봇: GAS 중계(askAI)로 Gemini 키를 서버에만 두므로, 로그인한 사용자는 별도 키 입력 없이 사용한다. -->
+<button class="rag-launch" id="ragLaunch" type="button">⌕ AX_챗봇</button>
 <div class="tkp-natural-drawer" id="tkpNaturalDrawer" role="dialog" aria-label="손익 자연어 검색 패널" aria-modal="false">
-  <div class="rag-head"><div class="rag-head-title"><i>⌕</i><div><b>AX_챗봇</b></div></div><button class="rag-toolbar-button" id="ragSettings" type="button">연결 설정</button><button class="rag-close" id="ragClose" type="button" aria-label="닫기">×</button></div>
+  <div class="rag-head"><div class="rag-head-title"><i>⌕</i><div><b>AX_챗봇</b></div></div><button class="rag-toolbar-button" id="ragSettings" type="button" hidden>연결 설정</button><button class="rag-close" id="ragClose" type="button" aria-label="닫기">×</button></div>
   <div class="rag-body">
-    <div class="rag-api" id="ragApiPanel"><div class="rag-api-row"><input class="rag-api-input" id="ragApiKey" type="password" autocomplete="off" placeholder="AI API 키 입력 (저장하지 않음)"><button class="rag-api-test" id="ragApiTest" type="button">연결 확인</button></div><div class="rag-api-state" id="ragApiState">키가 없으면 기존 로컬 해석으로 동작합니다.</div></div>
+    <div class="rag-api" id="ragApiPanel" hidden><div class="rag-api-row"><input class="rag-api-input" id="ragApiKey" type="password" autocomplete="off" placeholder="AI API 키 입력 (저장하지 않음)"><button class="rag-api-test" id="ragApiTest" type="button">연결 확인</button></div><div class="rag-api-state" id="ragApiState">키가 없으면 기존 로컬 해석으로 동작합니다.</div></div>
     <div class="rag-suggestions" id="ragSuggestions" hidden></div>
     <section class="rag-answer" id="ragAnswer"><div class="rag-start"><h3>무엇을 확인할까요?</h3><p>검증된 예시 질문을 선택하거나 아래에 직접 입력하세요.</p><div class="rag-start-grid"></div></div></section>
   </div>
@@ -4241,7 +4241,6 @@ document.getElementById('monthSelect').addEventListener('change',e=>{
     const paint=()=>{const loading=`<div class="rag-loading"><div class="rag-loading-title">${steps[index]}</div><div class="rag-loading-sub">잠시만 기다려 주세요. 숫자는 내장 데이터에서 계산합니다.</div>${wave}</div>`;paintChat(base+userBubble(question)+`<div class="rag-message rag-message-assistant rag-turn-loading"><div class="rag-assistant-card"><div class="rag-assistant-label">데이터 답변</div>${loading}</div></div>`)};paint();loadingTimer=setInterval(()=>{index=(index+1)%steps.length;paint()},850);return()=>{clearInterval(loadingTimer);loadingTimer=null}
   }
   async function callGemini(question,connectionOnly=false){
-    const key=apiKeyInput.value.trim();if(!key)throw new Error('API 키를 입력해 주세요.');
     // 토큰 절약: AI에게는 매 질문을 이전 대화와 무관한 1회성 질문으로만 보낸다.
     // (직전 대상 참조·되묻기 답변 병합은 더 이상 AI 프롬프트에 실어 보내지 않는다)
     const prior=`\n사용자 질문: ${question}`;
@@ -4267,9 +4266,10 @@ metric: sales(매출), profit(영업이익/이익액), rate(이익률), unknown.
 사람 이름만 단독으로 나오거나(예: "조홍식", "조홍식 자료") "담당자/담당" 같은 말이 붙으면(예: "김민호 담당 판매 목록") dimension=owner, owner에 그 이름을 그대로 넣어라. 담당자 정보도 문제판매 목록에만 있다.
 ${prior}`;
     const schema={type:'OBJECT',properties:{dimension:{type:'STRING',enum:['overall','team','category','item','customer','owner','unknown']},category:{type:'STRING',enum:['all','goods','product','other','unknown']},team:{type:'STRING'},teams:{type:'ARRAY',items:{type:'STRING'},maxItems:50},customer:{type:'STRING'},item:{type:'STRING'},owner:{type:'STRING'},business_unit:{type:'STRING',enum:['none','HPC','PMC','기획/생산']},period_type:{type:'STRING',enum:['current','month','ytd']},period_value:{type:'STRING'},metric:{type:'STRING',enum:['sales','profit','rate','unknown']},operation:{type:'STRING',enum:['list','summary','compare']},sort:{type:'STRING',enum:['asc','desc','none']},limit:{type:'INTEGER',minimum:1,maximum:100},comparison:{type:'STRING',enum:['none','mom','yoy']},comparison_condition:{type:'STRING',enum:['none','increased','decreased']},negative_only:{type:'BOOLEAN'},threshold_operator:{type:'STRING',enum:['none','gte','gt','lte','lt']},threshold_value:{type:'NUMBER'},needs_clarification:{type:'BOOLEAN'},clarification:{type:'STRING'},clarification_options:{type:'ARRAY',items:{type:'STRING'},maxItems:6},unsupported:{type:'BOOLEAN'},unsupported_reason:{type:'STRING'}},required:['dimension','category','team','teams','customer','item','owner','business_unit','period_type','period_value','metric','operation','sort','limit','comparison','comparison_condition','negative_only','threshold_operator','threshold_value','needs_clarification','clarification','clarification_options','unsupported','unsupported_reason']};
-    const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:schema,thinkingConfig:{thinkingLevel:'low'}}})});
-    const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload?.error?.message||`Gemini API 오류 (${response.status})`);
-    const raw=payload?.candidates?.[0]?.content?.parts?.map(part=>part.text||'').join('');if(!raw)throw new Error('AI에서 응답을 받지 못했습니다.');
+    // Gemini 키는 서버(GAS)에만 있다 — 화면은 세션으로만 인증하고, 프롬프트만 전달한다.
+    const result=await gasCall({action:'askAI',session:SESSION,prompt,schema});
+    if(!result.ok)throw new Error(result.error||'AI 연결 오류');
+    const raw=result.text;if(!raw)throw new Error('AI에서 응답을 받지 못했습니다.');
     return JSON.parse(raw);
   }
   async function testGemini(){if(geminiBusy)return;geminiBusy=true;apiTest.disabled=true;setApiState('AI에 연결하는 중…','busy');try{await callGemini('',true);geminiReady=true;setApiState('AI 연결 성공 · 현재 창에서만 키 유지','ok');setTimeout(()=>apiPanel.classList.remove('open'),550)}catch(error){geminiReady=false;setApiState(friendlyError(error),'bad')}finally{geminiBusy=false;apiTest.disabled=false}}
@@ -4626,23 +4626,23 @@ ${prior}`;
   }
   async function submitQuestion(text){
     text=String(text||'').trim();if(!text||geminiBusy)return;
-    saveView();input.value='';const base=chatHtml,key=apiKeyInput.value.trim();
+    saveView();input.value='';const base=chatHtml;
     const ownerHit=matchTeam(text)?null:await matchOwner(text);if(ownerHit){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
-    if(!key){render(text);finishTurn(base,text);return}
     geminiBusy=true;sendButton.disabled=true;backButton.disabled=true;resetButton.disabled=true;const stopLoading=startLoading(base,text);
     try{
-      const interpreted=await callGemini(text);geminiReady=true;setApiState('AI 연결됨 · 구조화된 질문 방식 · 키는 저장하지 않음','ok');
+      const interpreted=await callGemini(text);geminiReady=true;setApiState('AI 연결됨 · 구조화된 질문 방식','ok');
       if(interpreted.needs_clarification)renderClarification(interpreted,text);else executeCommand(interpreted,text);
       finishTurn(base,text);
-    }catch(error){geminiReady=false;const message=friendlyError(error);setApiState(message,'bad');answer.innerHTML=`<h3>AI 질문 처리 실패</h3><p class="rag-answer-summary">${esc(message)}</p>${chips(['API 키·사용 한도·연결 확인'])}<button type="button" class="rag-choice rag-local-fallback">이 질문을 로컬 규칙으로 실행</button>`;finishTurn(base,text);
+    }catch(error){geminiReady=false;const message=friendlyError(error);setApiState(message,'bad');answer.innerHTML=`<h3>AI 질문 처리 실패</h3><p class="rag-answer-summary">${esc(message)}</p>${chips(['사용 한도·서버 연결 확인'])}<button type="button" class="rag-local-fallback" data-question="${esc(text)}">이 질문을 로컬 규칙으로 실행</button>`;finishTurn(base,text);
     }finally{stopLoading();geminiBusy=false;sendButton.disabled=false;resetButton.disabled=false;updateBack()}
   }
-  $('ragLaunch').onclick=()=>{panel.classList.add('open');if(!apiKeyInput.value.trim())apiPanel.classList.add('open');setTimeout(()=>apiKeyInput.value.trim()?input.focus():apiKeyInput.focus(),120)};$('ragClose').onclick=()=>panel.classList.remove('open');
+  $('ragLaunch').onclick=()=>{panel.classList.add('open');setTimeout(()=>input.focus(),120)};$('ragClose').onclick=()=>panel.classList.remove('open');
   apiTest.onclick=testGemini;apiKeyInput.addEventListener('input',()=>{geminiReady=false;setApiState(apiKeyInput.value.trim()?'키 입력됨 · 연결 확인을 눌러 시험하세요.':'키가 없으면 기존 로컬 해석으로 동작합니다.')});
   settingsButton.onclick=()=>{apiPanel.classList.toggle('open');if(apiPanel.classList.contains('open'))setTimeout(()=>apiKeyInput.focus(),0)};
   backButton.onclick=restorePrevious;resetButton.onclick=resetConversation;
   $('ragSend').onclick=()=>submitQuestion(input.value);input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitQuestion(input.value)}});
   suggestions.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.resolve){applyTarget(button.dataset.resolve);return}input.value=button.textContent;submitQuestion(input.value)});
+  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-local-fallback');if(!button)return;event.preventDefault();event.stopPropagation();render(button.dataset.question||'')},true);
   answer.addEventListener('click',event=>{const button=event.target.closest('.rag-choice');if(!button)return;event.preventDefault();event.stopPropagation();applyTarget(button.dataset.target)},true);
   answer.addEventListener('click',event=>{const button=event.target.closest('.rag-clarify');if(!button)return;event.preventDefault();event.stopPropagation();const reply=button.dataset.clarify||button.textContent;input.value=reply;submitQuestion(reply)},true);
   answer.addEventListener('click',event=>{const button=event.target.closest('.rag-starter');if(!button)return;event.preventDefault();event.stopPropagation();submitQuestion(button.textContent)},true);
