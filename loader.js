@@ -37,12 +37,7 @@ async function gasCall(payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    // GAS ContentService는 /exec의 GET 상태확인 응답과 POST 리다이렉트가
-    // 같은 URL에서 겹치면 이전 GET 응답을 돌려주는 경우가 있다.
-    // 로그인·데이터·AI 요청마다 URL을 구분해 잘못된 캐시 응답을 막는다.
-    const separator = GAS_URL.includes('?') ? '&' : '?';
-    const requestUrl = GAS_URL + separator + 'api=1';
-    const res = await fetch(requestUrl, {
+    const res = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
