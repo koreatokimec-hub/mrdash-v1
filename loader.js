@@ -461,7 +461,6 @@ async function doLogin(name, password) {
 function finishBoot() {
   window.TKP.ready = true;
   document.getElementById('mrdashLogin')?.remove();
-  renderAccountBar();
   window.dispatchEvent(new CustomEvent('mrdash:ready')); // 화면 코드가 이 시점부터 그리기 시작
 }
 
@@ -503,31 +502,8 @@ async function boot() {
   renderLoginScreen();
 }
 
-// ── 계정 표시줄 (누구로 로그인했는지 + 비밀번호 변경 + 로그아웃) ──
-//
-// 원래 화면(ui_rag.html)엔 이런 자리가 없어서, 로그인 후 화면 맨 위에 얇은 줄로 얹는다.
-
-function renderAccountBar() {
-  const bar = document.createElement('div');
-  bar.id = 'mrdashAccountBar';
-  bar.innerHTML = `
-    <style>
-      #mrdashAccountBar{position:fixed;top:0;left:0;right:0;z-index:9998;
-        display:flex;justify-content:flex-end;align-items:center;gap:10px;
-        padding:5px 14px;background:#1a1a1a;color:#ddd;font-size:12px;
-        font-family:system-ui,"Malgun Gothic",sans-serif}
-      #mrdashAccountBar button{background:none;border:none;color:#ddd;
-        border-radius:5px;padding:2px 9px;font-size:11.5px;cursor:pointer}
-      #mrdashAccountBar button:hover{background:#333}
-      body{margin-top:26px !important}
-    </style>
-    <span>${ME} 님</span>
-    <button id="mrdashLogout">로그아웃</button>`;
-  document.body.prepend(bar);
-
-  // 비밀번호 변경은 사이드바 "로그인 설정" 메뉴로 일원화 — 상단 바에 중복으로 안 둔다.
-  document.getElementById('mrdashLogout').addEventListener('click', doLogout);
-}
+// 로그아웃/비밀번호 변경은 사이드바 "로그인 설정" 메뉴로 일원화했다 — 화면 맨 위를
+// 가로로 잡아먹던 계정 표시줄은 없앴다 (openLoginSettingsMenu 참고).
 
 async function doLogout() {
   try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
