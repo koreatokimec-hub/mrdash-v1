@@ -44,7 +44,6 @@ async function gasCall(payload, attempt = 1) {
     });
     if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
     body = await res.json();
-    if (body._timing) window.__MRDASH_TIMING = body._timing;
   } catch (e) {
     if (attempt >= 4) throw e;
     await new Promise(r => setTimeout(r, 1500));
