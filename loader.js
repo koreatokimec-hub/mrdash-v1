@@ -10,7 +10,7 @@
  *     최신월이 항상 그 시점(예: 2026-05)으로 나온다. summary로 즉시 덮어쓴다.
  */
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx1rBiqSLllTjra733b7uqK-rJFPQIwmFnk7wKJkLmmQNSaAzOWSb0RDZYZPxh1A0mY1w/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby3F73ZO0dWTDkLFJyT5NuHzuTG7Rou7sQkc-8GEz3P97rFwIB8G18_MEdk4eH4rEmkdw/exec";
 
 window.TKP = {
   ready: false,
