@@ -12,6 +12,32 @@
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycby3F73ZO0dWTDkLFJyT5NuHzuTG7Rou7sQkc-8GEz3P97rFwIB8G18_MEdk4eH4rEmkdw/exec";
 
+// Supabase 전환(2026-09): 로그인/세션/데이터조회(팀·거래처·점검판매 등)는 여기로 옮겼다.
+// 암호화 모델(TKP_MODEL) 키 전달만 당분간 GAS에 그대로 남겨둔 혼합 구조 — 그 부분은
+// 원래 느렸던 원인(반복 DB조회)과 무관해서 지금 안 건드린다.
+const SUPABASE_URL = "https://tfosicfcsjdedmspffsu.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Z2PAXLvZcP6Glu_sFuQW_w_kVL7mYk_";
+
+async function supabaseRpc(fn, body, attempt = 1) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+    return await res.json();
+  } catch (e) {
+    if (attempt >= 4) throw e;
+    await new Promise(r => setTimeout(r, 1000));
+    return supabaseRpc(fn, body, attempt + 1);
+  }
+}
+
 window.TKP = {
   ready: false,
   team: [], teamitem: [], problem: [], vendor: [], summary: [],
@@ -21,7 +47,8 @@ window.TKP = {
   problemFullyLoaded: false, // 챗봇 담당자 인식은 전체가 필요 — 첫 사용 시 한 번만 전부 받는다
 };
 
-let SESSION = sessionStorage.getItem('mrdash_session') || '';
+let SESSION = sessionStorage.getItem('mrdash_session') || '';      // Supabase 세션 토큰 (데이터조회용)
+let GAS_SESSION = sessionStorage.getItem('mrdash_gas_session') || ''; // GAS 세션 (모델 열쇠 전달용, 당분간 병행)
 let ME = sessionStorage.getItem('mrdash_name') || '';
 const BOOT_CACHE_KEY = 'mrdash_boot_v1';
 
@@ -336,7 +363,7 @@ async function ensureMonths(dataset, cache, globalName, months) {
   const fresh = months.filter(m => !cache.has(m) && !monthRequests.has(dataset + ':' + m));
   if (fresh.length) {
     const task = (async () => {
-      const r = await gasCall({ action: 'data', session: SESSION, dataset, months: fresh });
+      const r = await supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: dataset, p_months: fresh });
       // ok:true인데 rows가 없는(응답이 깨졌거나 잘린) 드문 경우도 방어한다 —
       // 안 그러면 forEach에서 그대로 죽어서 "불러오기 실패: undefined
       // forEach" 같은 원인 모를 에러로 화면에 뜬다.
@@ -375,7 +402,7 @@ async function loadAllProblem() {
   // 있어 되돌렸다 — 점검판매를 월별 시트로 쪼갠 뒤로는(2026-09) GAS로 직접
   // 받아도 이전만큼 느리진 않다. 이 전체 로딩은 챗봇 담당자 검색 때만 쓰여
   // 드물다.
-  const r = await gasCall({ action: 'data', session: SESSION, dataset: 'problem', month: null });
+  const r = await supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'problem' });
   if (!r.ok || !Array.isArray(r.rows)) throw new Error(r.error || 'problem 전체 로딩 실패');
   const rows = r.rows;
 
@@ -436,19 +463,31 @@ async function doLogin(name, password) {
   $msg.style.color = '#555';
   $msg.textContent = '확인 중...';
   try {
-    let login = await gasCall({ action: 'loginAndBootLite', name, password });
-    // 드물게 ok:true인데 session이 비어 오는 응답이 관찰됐다 — 원인 불명(GAS 쪽
-    // 순간 이상)이라 코드로 재현·확정은 못 했지만, 재시도 한 번으로 보통 넘어간다.
-    if (login.ok && !login.session) login = await gasCall({ action: 'loginAndBootLite', name, password });
+    const login = await supabaseRpc('login', { p_name: name, p_password: password });
     if (!login.ok) { $msg.style.color = '#c62828'; $msg.textContent = login.error; return; }
-    if (!login.session) throw new Error('서버 로그인 응답이 올바르지 않습니다. 다시 시도해 주세요.');
 
-    SESSION = login.session; ME = login.name;
+    SESSION = login.token; ME = login.name;
     sessionStorage.setItem('mrdash_session', SESSION);
     sessionStorage.setItem('mrdash_name', ME);
 
     $msg.textContent = '데이터 불러오는 중...';
-    const r = login;
+
+    // 모델(암호화 CDN) 열쇠는 당분간 GAS에서 그대로 받는다 — 같은 계정이 구글시트에도
+    // 남아있어야 하는 이유가 이것 때문이다 (혼합 구조, 2번 항목 참고).
+    const gasLogin = await gasCall({ action: 'loginAndBootLite', name, password });
+    if (!gasLogin.ok || !gasLogin.session) throw new Error('모델 데이터를 불러오지 못했습니다: ' + (gasLogin.error || ''));
+    GAS_SESSION = gasLogin.session;
+    sessionStorage.setItem('mrdash_gas_session', GAS_SESSION);
+
+    const [teamRes, vendorRes, summaryRes] = await Promise.all([
+      supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'team' }),
+      supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'vendor' }),
+      supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'summary' }),
+    ]);
+    if (!teamRes.ok || !vendorRes.ok || !summaryRes.ok) throw new Error('초기 데이터를 불러오지 못했습니다.');
+
+    const r = { delivery: gasLogin.delivery, model: gasLogin.model,
+                team: teamRes.rows, vendor: vendorRes.rows, summary: summaryRes.rows };
 
     await applyBootPayload(r);
     saveBootCache(r);
@@ -469,37 +508,49 @@ function finishBoot() {
 
 // 이미 로그인된 세션이 있으면(같은 탭, 새로고침) 로그인 화면 없이 boot만 다시 부른다.
 // 세션이 만료됐으면 서버가 오류를 주므로 그때는 로그인 화면으로 되돌린다.
+function clearAllSessions() {
+  sessionStorage.removeItem('mrdash_session');
+  sessionStorage.removeItem('mrdash_gas_session');
+  sessionStorage.removeItem('mrdash_name');
+  clearBootCache();
+  SESSION = ''; GAS_SESSION = '';
+}
+
+async function refetchBootPayload() {
+  const gasBoot = await gasCall({ action: 'bootLite', session: GAS_SESSION });
+  if (!gasBoot.ok) throw new Error(gasBoot.error || '로그인이 만료되었습니다.');
+  const [teamRes, vendorRes, summaryRes] = await Promise.all([
+    supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'team' }),
+    supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'vendor' }),
+    supabaseRpc('get_dataset', { p_session_token: SESSION, p_dataset: 'summary' }),
+  ]);
+  if (!teamRes.ok || !vendorRes.ok || !summaryRes.ok) throw new Error('데이터를 불러오지 못했습니다.');
+  return { delivery: gasBoot.delivery, model: gasBoot.model,
+           team: teamRes.rows, vendor: vendorRes.rows, summary: summaryRes.rows };
+}
+
 async function boot() {
-  if (SESSION) {
+  if (SESSION && GAS_SESSION) {
     const cached=readBootCache();
     if(cached){
       try{
         await applyBootPayload(cached);
         finishBoot();
-        gasCall({action:'bootLite',session:SESSION}).then(r=>{
+        // 화면부터 먼저 열고, 세션이 아직 살아있는지는 백그라운드에서 확인한다.
+        supabaseRpc('get_boot', { p_session_token: SESSION }).then(r=>{
           if(!r.ok)throw new Error(r.error||'로그인이 만료되었습니다.');
-          saveBootCache(r);
-        }).catch(()=>{
-          clearBootCache();
-          sessionStorage.removeItem('mrdash_session');
-          sessionStorage.removeItem('mrdash_name');
-          location.reload();
-        });
+        }).catch(()=>{ clearAllSessions(); location.reload(); });
         return;
       }catch(e){ clearBootCache(); }
     }
     try {
-      const r = await gasCall({ action: 'bootLite', session: SESSION });
-      if (!r.ok) throw new Error(r.error);
+      const r = await refetchBootPayload();
       await applyBootPayload(r);
       saveBootCache(r);
       finishBoot();
       return;
     } catch (e) {
-      sessionStorage.removeItem('mrdash_session');
-      sessionStorage.removeItem('mrdash_name');
-      clearBootCache();
-      SESSION = '';
+      clearAllSessions();
     }
   }
   renderLoginScreen();
@@ -509,10 +560,9 @@ async function boot() {
 // 가로로 잡아먹던 계정 표시줄은 없앴다 (openLoginSettingsMenu 참고).
 
 async function doLogout() {
-  try { await gasCall({ action: 'logout', session: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
-  sessionStorage.removeItem('mrdash_session');
-  sessionStorage.removeItem('mrdash_name');
-  clearBootCache();
+  try { await supabaseRpc('logout', { p_session_token: SESSION }); } catch (e) { /* 실패해도 로컬은 지운다 */ }
+  try { await gasCall({ action: 'logout', session: GAS_SESSION }); } catch (e) { /* 마찬가지 */ }
+  clearAllSessions();
   location.reload();
 }
 
@@ -596,10 +646,14 @@ function openChangePasswordDialog() {
     $('pwMsg').style.color = '#555';
     $('pwMsg').textContent = '처리 중...';
     try {
-      const r = await gasCall({ action: 'changePassword', session: SESSION, oldPassword, newPassword });
+      const r = await supabaseRpc('change_password', {
+        p_session_token: SESSION, p_old_password: oldPassword, p_new_password: newPassword,
+      });
       if (!r.ok) { $('pwMsg').style.color = '#c62828'; $('pwMsg').textContent = r.error; return; }
-      sessionStorage.removeItem('mrdash_session');
-      sessionStorage.removeItem('mrdash_name');
+      // GAS 쪽 계정 비밀번호도 같이 맞춰둔다 — 안 그러면 모델 열쇠(2번 항목) 로그인이 옛 비밀번호로 묶인다.
+      try { await gasCall({ action: 'changePassword', session: GAS_SESSION, oldPassword, newPassword }); }
+      catch (e) { /* 실패해도 데이터조회는 이미 새 비밀번호로 정상 동작 */ }
+      clearAllSessions();
       alert('비밀번호가 변경되었습니다. 다시 로그인해 주세요.');
       location.reload();
     } catch (e) {
