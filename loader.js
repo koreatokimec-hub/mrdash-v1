@@ -409,6 +409,14 @@ function renderLoginScreen() {
   const submit = () => doLogin($('mrdashName').value.trim(), $('mrdashPw').value);
   $('mrdashBtn').addEventListener('click', submit);
   $('mrdashPw').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+  // 같은 기기(브라우저)에서 마지막으로 로그인한 이름을 기억해서 채워둔다 —
+  // 재접속 시 비밀번호만 치면 되게. 세션과 달리 브라우저 껐다 켜도 남아있어야
+  // 하므로 localStorage를 쓴다(sessionStorage는 탭 닫으면 사라짐).
+  try {
+    const remembered = localStorage.getItem('mrdash_remembered_name');
+    if (remembered) { $('mrdashName').value = remembered; $('mrdashPw').focus(); }
+  } catch (e) { /* 저장소 접근 불가면 그냥 빈 칸으로 둔다 */ }
 }
 
 async function doLogin(name, password) {
@@ -423,6 +431,8 @@ async function doLogin(name, password) {
   try {
     const login = await supabaseRpc('login', { p_name: name, p_password: password });
     if (!login.ok) { $msg.style.color = '#c62828'; $msg.textContent = login.error; return; }
+
+    try { localStorage.setItem('mrdash_remembered_name', login.name); } catch (e) { /* 무시 */ }
 
     SESSION = login.token; ME = login.name;
     sessionStorage.setItem('mrdash_session', SESSION);
