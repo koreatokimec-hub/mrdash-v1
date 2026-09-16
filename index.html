@@ -4320,6 +4320,7 @@ document.getElementById('monthSelect').addEventListener('change',e=>{
 데이터 최신월은 ${M.months[latestIndex]}, 보유 기간은 ${M.months[0]}~${M.months[latestIndex]}이다. 기간을 특정하지 않았으면(연도·월 언급이 전혀 없으면) 기본이 "올해 누계"이므로 period_type=current를 사용하라 (current는 실행 시 자동으로 올해 누계로 처리된다).
 "이번 달", "이달", "당월"처럼 이번 한 달만 콕 집으면 period_type=month, period_value=${M.months[latestIndex]}로 넣어라.
 특정 연도만 언급되고 월이 없으면(예: "2025년", "작년", "재작년") 그 연도 전체 합계를 뜻하므로 period_type=ytd, period_value에 연도만(예: "2025")을 넣어라. 연도와 월이 같이 언급되면(예: "2025년 3월") period_type=month, period_value=YYYY-MM 형식으로 넣어라.
+분기(1분기/2분기/3분기/4분기), 반기(상반기/하반기), 특정 두 달 이상의 임의 구간처럼 month/ytd/current 셋 중 어느 것으로도 정확히 표현할 수 없는 기간은, 월 하나로 임의로 바꾸지 말고 반드시 unsupported=true, unsupported_reason에 이유를 넣어라.
 정확한 팀명: ${teamNames.join(', ')}. 특정 팀 하나를 지목한 게 아니면(예: "전체 팀 순위", "매출 1위 팀", "적자 팀 목록") team은 빈 문자열("")로 두어라. "all", "전체", "전사" 같은 임의의 값을 team에 넣지 마라.
 소속 정보: ${(M.teams||[]).map(row=>`${row[0]}=${row[1]}`).join(', ')}.
 dimension: overall(회사 전체), team(전체 팀 또는 특정 팀), category(판매구분 합계), item(개별 품목), customer(거래처), unknown.
@@ -4338,7 +4339,7 @@ metric: sales(매출), profit(영업이익/이익액), rate(이익률), unknown.
 ${prior}`;
     const schema={type:'OBJECT',properties:{dimension:{type:'STRING',enum:['overall','team','category','item','customer','owner','unknown']},category:{type:'STRING',enum:['all','goods','product','other','unknown']},team:{type:'STRING'},teams:{type:'ARRAY',items:{type:'STRING'},maxItems:50},customer:{type:'STRING'},item:{type:'STRING'},owner:{type:'STRING'},business_unit:{type:'STRING',enum:['none','HPC','PMC','기획/생산']},period_type:{type:'STRING',enum:['current','month','ytd']},period_value:{type:'STRING'},metric:{type:'STRING',enum:['sales','profit','rate','unknown']},operation:{type:'STRING',enum:['list','summary','compare']},sort:{type:'STRING',enum:['asc','desc','none']},limit:{type:'INTEGER',minimum:1,maximum:100},comparison:{type:'STRING',enum:['none','mom','yoy']},comparison_condition:{type:'STRING',enum:['none','increased','decreased']},negative_only:{type:'BOOLEAN'},threshold_operator:{type:'STRING',enum:['none','gte','gt','lte','lt']},threshold_value:{type:'NUMBER'},needs_clarification:{type:'BOOLEAN'},clarification:{type:'STRING'},clarification_options:{type:'ARRAY',items:{type:'STRING'},maxItems:6},unsupported:{type:'BOOLEAN'},unsupported_reason:{type:'STRING'}},required:['dimension','category','team','teams','customer','item','owner','business_unit','period_type','period_value','metric','operation','sort','limit','comparison','comparison_condition','negative_only','threshold_operator','threshold_value','needs_clarification','clarification','clarification_options','unsupported','unsupported_reason']};
     // Gemini 키는 서버(GAS)에만 있다 — 화면은 세션으로만 인증하고, 프롬프트만 전달한다.
-    const result=await gasCall({action:'askAI',session:SESSION,prompt,schema});
+    const result=await gasCall({action:'askAI',session:GAS_SESSION,prompt,schema});
     if(!result.ok)throw new Error(result.error||'AI 연결 오류');
     const raw=result.text;if(!raw)throw new Error('AI에서 응답을 받지 못했습니다.');
     return JSON.parse(raw);
@@ -4654,9 +4655,28 @@ ${prior}`;
     const metricFollowups=['sales','profit','rate'].filter(k=>k!==metric).map(k=>({label:`${targetsShort} ${metricLabel(k)} 비교`,value:`${targetsFull} ${metricLabel(k)} 비교`}));
     answer.innerHTML=`<h3>팀 <span class="rag-basis ${metricBasisClass(metric)}">${esc(metricLabel(metric))}</span> 비교 <span class="rag-basis ${metricBasisClass(metric)}">(${esc(period.label)})</span></h3><p class="rag-answer-summary">${esc(detail)}</p>${chips([period.label,`${rows.length}개 팀`,metricLabel(metric),compareLabel])}<div class="rag-table-wrap"><table class="rag-table"><thead><tr><th>팀</th>${headCols}${refOffset?`<th>${compareLabel}</th>`:''}</tr></thead><tbody>${body}</tbody></table></div>${followups([...metricFollowups,...yearViewFollowups(original,period.index)])}`;
   }
-  function executeCommand(command,original){
+  // 기존 스키마(팀/판매구분/거래처/품목/담당자)로 못 다루는 질문(분기별 집계, 새로운 조합 등)은
+  // Supabase의 ask_ai(Text-to-SQL)로 넘긴다 — 기존 렌더링은 그대로 두고 이 경로만 추가한다.
+  async function renderAskAiFallback(original){
+    answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">고급 질의로 다시 확인하는 중...</p>`;
+    try{
+      const r=await supabaseRpc('ask_ai',{p_session_token:SESSION,p_question:original});
+      if(!r.ok){answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">${esc(r.error||'처리하지 못했습니다.')}</p>`;return}
+      let table='';
+      if(Array.isArray(r.rows)&&r.rows.length){
+        const cols=Object.keys(r.rows[0]);
+        const head=cols.map(c=>`<th>${esc(c)}</th>`).join('');
+        const body=r.rows.slice(0,50).map(row=>`<tr>${cols.map(c=>`<td>${esc(row[c])}</td>`).join('')}</tr>`).join('');
+        table=`<div class="rag-table-wrap"><table class="rag-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+      }
+      answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">${esc(r.answer||'')}</p>${table}`;
+    }catch(e){
+      answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">고급 질의 연결에 실패했습니다: ${esc(e.message)}</p>`;
+    }
+  }
+  async function executeCommand(command,original){
     command=normalizeCommand(command,original);
-    if(command.unsupported){answer.innerHTML=`<h3>${esc(original)}</h3><p class="rag-answer-summary">${esc(command.unsupported_reason||'현재 데이터에 없는 요청입니다.')}</p>`;return}
+    if(command.unsupported){await renderAskAiFallback(original);return}
     if(command.dimension==='customer'){renderCustomers(command,original);return}
     if(command.dimension==='owner'){renderOwnerProblems(command,original);return}
     if(command.dimension==='item'){renderItems(command,original);return}
@@ -4702,7 +4722,7 @@ ${prior}`;
     geminiBusy=true;sendButton.disabled=true;backButton.disabled=true;resetButton.disabled=true;const stopLoading=startLoading(base,text);
     try{
       const interpreted=await callGemini(text);geminiReady=true;setApiState('AI 연결됨 · 구조화된 질문 방식','ok');
-      if(interpreted.needs_clarification)renderClarification(interpreted,text);else executeCommand(interpreted,text);
+      if(interpreted.needs_clarification)renderClarification(interpreted,text);else await executeCommand(interpreted,text);
       finishTurn(base,text);
     }catch(error){geminiReady=false;const message=friendlyError(error);setApiState(message,'bad');answer.innerHTML=`<h3>AI 질문 처리 실패</h3><p class="rag-answer-summary">${esc(message)}</p>${chips(['사용 한도·서버 연결 확인'])}<button type="button" class="rag-local-fallback" data-question="${esc(text)}">이 질문을 로컬 규칙으로 실행</button>`;finishTurn(base,text);
     }finally{stopLoading();geminiBusy=false;sendButton.disabled=false;resetButton.disabled=false;updateBack()}
