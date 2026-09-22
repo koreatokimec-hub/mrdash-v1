@@ -879,7 +879,7 @@ table.tbl td{line-height:1.4}
   <div class="page-topbar" aria-label="대시보드 제목">
     <div>
       <div class="page-eyebrow">PROFITABILITY OVERVIEW</div>
-      <h1 id="pageTitle">5월 손익 분석 대시보드</h1>
+      <h1 id="pageTitle">5월 손익 대시보드</h1>
       <div class="scope-badge" id="scopeBadge">5월 단월 기준</div>
     </div>
   </div>
@@ -1328,7 +1328,7 @@ function updateDashboardTitle(){
   document.title=`TKP ${month}월 손익 보고서`;
   const isYearScope=kpiScope==='Y';
   const pageTitle=document.getElementById('pageTitle');
-  if(pageTitle)pageTitle.textContent=isYearScope?`1~${month}월 누계 손익 분석 대시보드`:`${month}월 손익 분석 대시보드`;
+  if(pageTitle)pageTitle.textContent=isYearScope?`1~${month}월 누계 손익 대시보드`:`${month}월 손익 대시보드`;
   const scopeBadge=document.getElementById('scopeBadge');
   if(scopeBadge)scopeBadge.textContent=isYearScope?`${year}년 1~${month}월 누계 기준`:`${year}년 ${month}월 단월 기준`;
   /* 아래는 KPI 드롭다운과 무관하게 앱의 실제 "현재(최신) 월" 기준으로 고정 — 다른 카드들은 각자 독립적으로 움직인다.
