@@ -76,10 +76,19 @@ function clearBootCache() { sessionStorage.removeItem(BOOT_CACHE_KEY); }
  * 메인 모델과 점검판매 전체이력 둘 다 이 함수를 같이 쓴다.
  */
 async function fetchEncryptedJson(delivery){
-  const url = new URL(delivery.file, location.href);
+  const loc = new URL(location.href);
+  let pathname = loc.pathname;
+  if (!pathname.endsWith('/')) {
+    if (!pathname.includes('.')) pathname += '/';
+    else pathname = pathname.substring(0, pathname.lastIndexOf('/') + 1);
+  }
+  const url = new URL(delivery.file, loc.origin + pathname);
   url.searchParams.set('v', delivery.hash);
-  const response = await fetch(url, {cache:'force-cache'});
-  if (!response.ok) throw new Error('암호화 데이터 파일을 불러오지 못했습니다.');
+  let response = await fetch(url, {cache:'no-cache'});
+  if (!response.ok) {
+    response = await fetch(new URL(delivery.file, loc.origin + pathname), {cache:'reload'});
+  }
+  if (!response.ok) throw new Error(`암호화 데이터 파일을 불러오지 못했습니다. (HTTP ${response.status})`);
   const encrypted = await response.arrayBuffer();
   const keyBytes = Uint8Array.from(atob(delivery.key), c => c.charCodeAt(0));
   const iv = Uint8Array.from(atob(delivery.iv), c => c.charCodeAt(0));
