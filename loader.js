@@ -400,6 +400,10 @@ function renderLoginScreen() {
       #mrdashLogin h1{font-size:16px;margin:0 0 14px}
       #mrdashLogin input{width:100%;padding:9px;margin-bottom:9px;border:1px solid #ccc;
         border-radius:7px;font-size:14px;box-sizing:border-box}
+      #mrdashLogin .idrow{position:relative}
+      #mrdashLogin .idrow input{padding-right:112px}
+      #mrdashLogin .idrow .dom{position:absolute;right:10px;top:9px;font-size:13px;color:#b4b4b8;
+        pointer-events:none;user-select:none}
       #mrdashLogin button{width:100%;padding:10px;background:#1a73e8;color:#fff;
         border:none;border-radius:7px;font-weight:600;cursor:pointer}
       #mrdashLogin button:disabled{opacity:.5}
@@ -407,7 +411,10 @@ function renderLoginScreen() {
     </style>
     <div class="card">
       <h1>손익 대시보드 로그인</h1>
-      <input id="mrdashName" placeholder="이름" autocomplete="username">
+      <div class="idrow">
+        <input id="mrdashName" placeholder="아이디" autocomplete="username" autocapitalize="none" spellcheck="false">
+        <span class="dom">@tokimec.co.kr</span>
+      </div>
       <input id="mrdashPw" type="password" placeholder="비밀번호" autocomplete="current-password">
       <button id="mrdashBtn">로그인</button>
       <div class="msg" id="mrdashMsg"></div>
@@ -424,7 +431,7 @@ function renderLoginScreen() {
   // 하므로 localStorage를 쓴다(sessionStorage는 탭 닫으면 사라짐).
   try {
     const remembered = localStorage.getItem('mrdash_remembered_name');
-    if (remembered) { $('mrdashName').value = remembered; $('mrdashPw').focus(); }
+    if (remembered) { $('mrdashName').value = remembered.replace(/@tokimec\.co\.kr$/i, ''); $('mrdashPw').focus(); }
   } catch (e) { /* 저장소 접근 불가면 그냥 빈 칸으로 둔다 */ }
 }
 
@@ -432,7 +439,7 @@ async function doLogin(name, password) {
   const $btn = document.getElementById('mrdashBtn');
   if ($btn.disabled) return;
   const $msg = document.getElementById('mrdashMsg');
-  if (!name || !password) { $msg.textContent = '이름과 비밀번호를 입력하세요'; return; }
+  if (!name || !password) { $msg.textContent = '아이디와 비밀번호를 입력하세요'; return; }
 
   $btn.disabled = true;
   $msg.style.color = '#555';
