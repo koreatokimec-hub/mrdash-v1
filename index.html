@@ -1258,7 +1258,7 @@ window.TKP_MODEL=null
 
 window.TKP_MODEL_HASH="template";
 </script>
-<script src="loader.js?v=20260922f"></script>
+<script src="loader.js?v=20261012-question-log"></script>
 <script>
 /**
  * 부트스트랩 — 로그인+데이터 로딩(loader.js)이 끝날 때까지 나머지 화면 스크립트를
@@ -4481,7 +4481,7 @@ ${prior}`;
     suggestions.innerHTML=defaultSuggestions;
     answer.innerHTML=`<h3>${esc(text)}</h3><p class="rag-answer-summary">어떤 기준으로 조회할까요? 아래 항목 중 하나를 검색창에 입력해 주세요.</p>${chips(choices)}<p class="rag-answer-summary">예: <b>${esc(activeTeam?activeTeam+' 월별':'전체 팀')}</b></p>`;
   }
-  function applyTarget(target){const suffix={"team-month":activeTeam||'',team:'전체 팀',goods:'상품',product:'제품',category:'상품·제품 전체',item:'개별 품목'}[target]||'';input.value=(pendingText+' '+suffix).trim();suggestions.innerHTML=defaultSuggestions;render(input.value)}
+  function applyTarget(target){const suffix={"team-month":activeTeam||'',team:'전체 팀',goods:'상품',product:'제품',category:'상품·제품 전체',item:'개별 품목'}[target]||'';input.value=(pendingText+' '+suffix).trim();suggestions.innerHTML=defaultSuggestions;void recordAiQuestion(input.value,'button',suffix||target);render(input.value)}
   async function render(text){
     if(!text.trim())return;text=String(text).replace(/영억이익|영역이익|영익이익/g,'영업이익').replace(/이익율/g,'이익률').replace(/(?<!\d)(\d{2})년/g,'20$1년');
     if(pendingText){const reply=text.trim(),isTarget=/^(?:전체\s*팀|팀|상품|제품|상품[·\s]*제품\s*전체|개별\s*품목|품목)$/.test(reply)||!!matchTeam(reply);if(isTarget){const original=pendingText;pendingText='';text=(original+' '+(reply==='팀'?'전체 팀':reply)).trim();input.value=text}}
@@ -4715,8 +4715,9 @@ ${prior}`;
     // 연결질문 비활성화: 답변을 이전 질문에 병합하지 않으므로 여기서 pendingGemini를 채우지 않는다.
     // (버튼을 누르면 그 문구만으로 완전히 새 질문을 보낸다)
   }
-  async function submitQuestion(text){
+  async function submitQuestion(text,inputType='typed',buttonLabel=null){
     text=String(text||'').trim();if(!text||geminiBusy)return;
+    void recordAiQuestion(text,inputType,buttonLabel);
     saveView();input.value='';const base=chatHtml;
     const ownerHit=matchTeam(text)?null:await matchOwner(text);if(ownerHit){renderOwnerProblems({owner:ownerHit},text);finishTurn(base,text);return}
     geminiBusy=true;sendButton.disabled=true;backButton.disabled=true;resetButton.disabled=true;const stopLoading=startLoading(base,text);
@@ -4732,13 +4733,12 @@ ${prior}`;
   settingsButton.onclick=()=>{apiPanel.classList.toggle('open');if(apiPanel.classList.contains('open'))setTimeout(()=>apiKeyInput.focus(),0)};
   backButton.onclick=restorePrevious;resetButton.onclick=resetConversation;
   $('ragSend').onclick=()=>submitQuestion(input.value);input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitQuestion(input.value)}});
-  suggestions.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.resolve){applyTarget(button.dataset.resolve);return}input.value=button.textContent;submitQuestion(input.value)});
-  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-local-fallback');if(!button)return;event.preventDefault();event.stopPropagation();render(button.dataset.question||'')},true);
+  suggestions.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.resolve){applyTarget(button.dataset.resolve);return}input.value=button.textContent;submitQuestion(input.value,'button',button.textContent)});
+  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-local-fallback');if(!button)return;event.preventDefault();event.stopPropagation();void recordAiQuestion(button.dataset.question||'','button',button.textContent);render(button.dataset.question||'')},true);
   answer.addEventListener('click',event=>{const button=event.target.closest('.rag-choice');if(!button)return;event.preventDefault();event.stopPropagation();applyTarget(button.dataset.target)},true);
-  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-clarify');if(!button)return;event.preventDefault();event.stopPropagation();const reply=button.dataset.clarify||button.textContent;input.value=reply;submitQuestion(reply)},true);
-  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-starter');if(!button)return;event.preventDefault();event.stopPropagation();submitQuestion(button.textContent)},true);
-  window.addEventListener('pointerdown',event=>{const button=event.target.closest&&event.target.closest('.rag-choice');if(!button)return;event.preventDefault();event.stopPropagation();applyTarget(button.dataset.target)},true);
-  window.addEventListener('click',event=>{const button=event.target.closest&&event.target.closest('[data-resolve]');if(!button)return;event.preventDefault();event.stopPropagation();applyTarget(button.dataset.resolve)},true);
+  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-clarify');if(!button)return;event.preventDefault();event.stopPropagation();const reply=button.dataset.clarify||button.textContent;input.value=reply;submitQuestion(reply,'button',button.textContent)},true);
+  answer.addEventListener('click',event=>{const button=event.target.closest('.rag-starter');if(!button)return;event.preventDefault();event.stopPropagation();submitQuestion(button.textContent,'button',button.textContent)},true);
+  window.addEventListener('click',event=>{const button=event.target.closest&&event.target.closest('[data-resolve]');if(!button||suggestions.contains(button))return;event.preventDefault();event.stopPropagation();applyTarget(button.dataset.resolve)});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&panel.classList.contains('open'))panel.classList.remove('open')});
   document.addEventListener('pointerdown',event=>{if(!panel.classList.contains('open'))return;const target=event.target;if(panel.contains(target)||(target.closest&&target.closest('#ragLaunch')))return;panel.classList.remove('open')},true);
 })();

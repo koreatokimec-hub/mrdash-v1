@@ -36,6 +36,32 @@ async function supabaseRpc(fn, body, attempt = 1) {
   }
 }
 
+// 질문 기록은 AI 호출과 분리한다. DB 설정 전에도 검색은 계속 동작한다.
+async function recordAiQuestion(question, inputType = 'typed', buttonLabel = null) {
+  const text = String(question || '').trim();
+  if (!text || !SESSION) return;
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/log_ai_question`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        p_session_token: SESSION,
+        p_question: text,
+        p_input_type: inputType,
+        p_button_label: buttonLabel,
+      }),
+      keepalive: true,
+    });
+    if (!response.ok) console.warn('AI 질문 기록 실패:', response.status);
+  } catch (error) {
+    console.warn('AI 질문 기록 연결 실패');
+  }
+}
+
 window.TKP = {
   ready: false,
   team: [], teamitem: [], problem: [], vendor: [], summary: [],
