@@ -389,6 +389,10 @@ body.profit-focus-open #p1 .card:not(.profit-trend-card),body.profit-focus-open 
 #productRankTable tbody tr{cursor:pointer}
 #productRankTable tbody tr:hover td{background:color-mix(in srgb,var(--accent) 7%,var(--card))}
 .detail-list-card{display:flex;flex-direction:column}
+/* 점검 판매 리스트: 전체 판매 목록으로 오해하지 않도록 제목을 키우고 "점검"을 주황색으로 강조 */
+.detail-list-card .title-tools h3.problem-title{font-size:24px;font-weight:850;letter-spacing:-.03em;line-height:1.2;margin:0}
+.detail-list-card .problem-flag{display:inline-block;padding:1px 10px 2px;border-radius:9px;background:#fff1e3;color:#e8590c;box-shadow:inset 0 0 0 1.5px #f4a261}
+.detail-list-card .problem-hint{font-size:12.5px;font-weight:600;color:var(--muted)}
 .detail-sticky-tools{position:relative;z-index:3;flex:0 0 auto;margin:-4px -2px 0;padding:4px 2px 8px;background:var(--card);box-shadow:0 9px 12px -13px rgba(0,0,0,.55)}
 /* 표 내부 스크롤 영역은 부모 flex 높이에 기대지 않고 고정 높이를 직접 갖는다.
    (검색창 등 상단 툴바가 좁은 화면에서 줄바꿈되며 커져도 표 영역이 눌려서 짤리는 문제를 막기 위함) */
@@ -1111,7 +1115,8 @@ table.tbl td{line-height:1.4}
       <div class="detail-sticky-tools" id="problemStickyTools">
         <div class="head">
           <div class="title-tools">
-            <h3>점검 판매 리스트</h3>
+            <h3 class="problem-title"><span class="problem-flag">점검</span> 판매 리스트</h3>
+            <span class="problem-hint">전체 판매가 아니라 적자·저마진 등 점검이 필요한 판매만 보여줍니다</span>
             <span class="scope-range" id="problemScopeRange" hidden></span>
             <div class="scope-switch" id="problemScope"><button data-scope="M" class="on">당월</button><button data-scope="Y">당해</button><button data-scope="12">1년</button><button data-scope="24">2년</button><button data-scope="41">전체</button></div>
           </div>
@@ -1355,9 +1360,7 @@ document.getElementById('tabNav').addEventListener('click', e=>{
   document.querySelectorAll('#tabNav a').forEach(x=>x.classList.toggle('on',x===a));
   document.querySelectorAll('.tab-page').forEach(p=>p.classList.toggle('on',p.id===a.dataset.p));
   document.body.classList.toggle('detail-view',a.dataset.p==='p4'||a.dataset.p==='p5');
-  if(TKP&&(a.dataset.p==='p4'||a.dataset.p==='p5')&&kpiMonthIndex!==M41.length-1){
-    kpiMonthIndex=M41.length-1;kpiScope='M';document.getElementById('monthSelect').value=TKP.latest;updateDashboardTitle();updateMainKpis();
-  }
+  /* 예전에는 상세 탭(p4·p5)으로 가면 기준월을 최신월로 되돌렸다. 이제 상세 목록도 기준월을 따르므로 되돌리지 않는다. */
   if(a.dataset.p!=='p1')closeBandFocus();
 });
 
@@ -3709,14 +3712,33 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&presentationCard){e.preventDefault();e.stopImmediatePropagation();closePresentation()}
 },true);
 
-/* 전체 탭 요약 지표(KPI) 기간 선택 — KPI 4장에만 영향을 준다. 매출액/이익률/이익액 추이, 매출 구성, B.U별 보고서,
-   팀별구분 탭의 카드들은 전부 각자 자기 컨트롤로만 독립적으로 움직인다 */
-document.getElementById('monthSelect').addEventListener('change',e=>{
+/* 요약 지표 기준(맨 위 월 선택) — 선택한 월이 대시보드 전체의 기준월이 된다.
+   KPI·추이 차트·매출 구성·팀별 매출액·팀별 이익률 구간·점검 판매 리스트·거래처 목록이 모두 같은 월로 바뀌고,
+   선택한 월보다 뒤의 월은 어느 카드에도 나오지 않는다(추이 차트는 applyMode가 activeMonthIndex에서 끊는다).
+   각 카드의 자기 월 선택칸은 그대로 남아 있어 카드별로 다시 바꿀 수 있다. */
+function applyGlobalMonth(value){
   if(!TKP)return;
-  const parsed=parsePeriodValue(e.target.value);if(!parsed)return;
-  kpiMonthIndex=parsed.index;kpiScope=parsed.isYtd?'Y':'M';
+  const parsed=parsePeriodValue(value);if(!parsed)return;
+  const period=parsed.isYtd?'Y':'M';
+  kpiMonthIndex=parsed.index;kpiScope=period;
+  activeMonthIndex=parsed.index;
+  teamMainMonthIndex=parsed.index;teamMainPeriod=period;
+  bandTeamMonthIndex=parsed.index;bandTeamPeriod=period;
+  salesMixPeriod=period;problemScope=period;customerScope=period;
+  ['teamMonthSelect','bandTeamMonthSelect'].forEach(id=>{const s=document.getElementById(id);if(s)s.value=value});
+  setScopeSelection('salesMixMode',salesMixPeriod,'salesMixRange');
+  [['problemScope',problemScope],['customerScope',customerScope]].forEach(([id,scope])=>{
+    document.querySelectorAll(`#${id} button`).forEach(x=>x.classList.toggle('on',x.dataset.scope===scope));
+  });
   updateDashboardTitle();updateMainKpis();
-});
+  renderSales(salesMode,salesGrain);renderRate(rateMode,rateGrain);renderBandTrends();
+  renderSalesMix();
+  if(typeof renderBuChart==='function')renderBuChart();
+  renderTeamMain();renderBandTeam();
+  updateProblemScopeNote();renderProblemSales();
+  updateCustomerScopeNote();renderCustomerTable();
+}
+document.getElementById('monthSelect').addEventListener('change',e=>applyGlobalMonth(e.target.value));
  </script>
 <script data-tkp-boot type="text/plain">
 /* Decorative chart depth only; source values and interactions remain unchanged. */
