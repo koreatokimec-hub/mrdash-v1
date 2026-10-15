@@ -392,7 +392,6 @@ body.profit-focus-open #p1 .card:not(.profit-trend-card),body.profit-focus-open 
 /* 점검 판매 리스트: 전체 판매 목록으로 오해하지 않도록 제목을 키우고 "점검"을 주황색으로 강조 */
 .detail-list-card .title-tools h3.problem-title{font-size:24px;font-weight:850;letter-spacing:-.03em;line-height:1.2;margin:0}
 .detail-list-card .problem-flag{display:inline-block;padding:1px 10px 2px;border-radius:9px;background:#fff1e3;color:#e8590c;box-shadow:inset 0 0 0 1.5px #f4a261}
-.detail-list-card .problem-hint{font-size:12.5px;font-weight:600;color:var(--muted)}
 .detail-sticky-tools{position:relative;z-index:3;flex:0 0 auto;margin:-4px -2px 0;padding:4px 2px 8px;background:var(--card);box-shadow:0 9px 12px -13px rgba(0,0,0,.55)}
 /* 표 내부 스크롤 영역은 부모 flex 높이에 기대지 않고 고정 높이를 직접 갖는다.
    (검색창 등 상단 툴바가 좁은 화면에서 줄바꿈되며 커져도 표 영역이 눌려서 짤리는 문제를 막기 위함) */
@@ -1116,7 +1115,6 @@ table.tbl td{line-height:1.4}
         <div class="head">
           <div class="title-tools">
             <h3 class="problem-title"><span class="problem-flag">점검</span> 판매 리스트</h3>
-            <span class="problem-hint">전체 판매가 아니라 적자·저마진 등 점검이 필요한 판매만 보여줍니다</span>
             <span class="scope-range" id="problemScopeRange" hidden></span>
             <div class="scope-switch" id="problemScope"><button data-scope="M" class="on">당월</button><button data-scope="Y">당해</button><button data-scope="12">1년</button><button data-scope="24">2년</button><button data-scope="41">전체</button></div>
           </div>
