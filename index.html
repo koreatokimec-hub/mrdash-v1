@@ -1124,8 +1124,6 @@ table.tbl td{line-height:1.4}
           <div class="problem-tools">
             <input type="text" class="search" id="problemSearch" placeholder="품번·품목명·거래처 검색" aria-label="점검 판매 리스트 검색">
             <button class="filter-reset" id="problemFilterReset" type="button">초기화</button>
-            <!-- 시안 단계: 실제 데이터에 상품/제품 구분값이 아직 없어 자리만 잡아둠. 데이터 연결 후 필터링 연동 -->
-            <div class="seg mini" id="problemCategoryFilter"><button data-cat="all" class="on">전체</button><button data-cat="goods">상품</button><button data-cat="product">제품</button></div>
             <select class="month" id="problemTypeFilter">
               <option value="all">전체</option>
               <option value="loss" selected>적자판매</option>
@@ -3131,7 +3129,6 @@ async function problemTypeCount(uiType){
   return (await problemRowsRaw(uiType)).length;
 }
 let problemType='loss';
-let problemCategory='all'; /* 시안 단계: 상품/제품 토글은 자리만 잡아둠. 실데이터에 구분값 생기면 여기서 필터링 연결 */
 let problemSearchText='';
 let currentProblemRows=[];
 let problemSort={key:'profit',dir:'asc'};const PROBLEM_TEXT_KEYS=new Set(['item','vendor','owner']);
@@ -3195,19 +3192,11 @@ async function renderProblemSales(){
 document.getElementById('problemTypeFilter').addEventListener('change',e=>{
   problemType=e.target.value;renderProblemSales();
 });
-document.getElementById('problemCategoryFilter').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-cat]');if(!b)return;
-  problemCategory=b.dataset.cat;
-  document.querySelectorAll('#problemCategoryFilter button').forEach(x=>x.classList.toggle('on',x===b));
-  /* 시안 단계: 아직 실제 필터링에는 반영하지 않음 */
-});
 document.getElementById('problemFilterReset').addEventListener('click',()=>{
   document.getElementById('problemSearch').value='';
   problemSearchText='';
   problemType='loss';
   document.getElementById('problemTypeFilter').value='loss';
-  problemCategory='all';
-  document.querySelectorAll('#problemCategoryFilter button').forEach(b=>b.classList.toggle('on',b.dataset.cat==='all'));
   problemSort={key:'profit',dir:'asc'};
   renderProblemSales();
 });
