@@ -3811,10 +3811,38 @@ document.getElementById('monthSelect').addEventListener('change',e=>applyGlobalM
             r.m_sales_goods,r.m_sales_product,r.m_sales_etc,r.m_sales_total,
             r.m_profit_goods,r.m_profit_product,r.m_profit_etc,r.m_profit_total].map(v=>+v||0);
   }
+  /* 팀별 손익 현황 표시 순서 (2026-08 기준으로 고정). 팀 이름·항목 이름이 바뀌면 여기도 맞춰야 한다. */
+  const FIXED_TEAM_ORDER=["산기 시스템팀","충청 영업팀","건기 시스템팀","제어 시스템팀","영남 사업팀","공기 사업팀","P&M 시스템팀","FA 기술영업팀","공압 사업팀","공압 시스템팀","PM SB.U","수출 / 기타"];
+  const FIXED_ITEM_ORDER={
+    "산기 시스템팀":["시판","실린더","제어"],
+    "충청 영업팀":["우진 사출기","우진 제어","시판 시판","시판 실린더","시판 제어"],
+    "건기 시스템팀":["농기계(LS)","모바일","SYSTEM","개발/기타","제어"],
+    "제어 시스템팀":["LS 사출기","LS 실린더","LS 제어","시판 개발/기타","시판 실린더","시판 제어"],
+    "영남 사업팀":["시판","선박/조선","실린더","SYSTEM","제어"],
+    "공기 사업팀":["공작기계","실린더","제어"],
+    "P&M 시스템팀":["시판","실린더","모바일","대구공압","제어"],
+    "FA 기술영업팀":["로봇자동화","사출기 외","제어"],
+    "공압 사업팀":["시판","직납","계측기","제어"],
+    "공압 시스템팀":["부산공압","시스템","계측기","제어"],
+    "PM SB.U":["영업기술(PJT)","영업기술(ACT)"],
+    "수출 / 기타":["TKW","TK","개발/기타"]
+  };
   async function buildDATA(){
     const idx=activeIndex(),monthKey=M.months[idx];
     if(monthKey)await ensureTeamitemMonths([monthKey]); // 그 달만 서버에서 받아온다 (지연 로딩)
-    const monthRows=(window.TKP_TEAMITEM||[]).filter(r=>r.month===monthKey);
+    /* 서버는 팀·항목 이름순(order by team, item)으로 내려주므로 그대로 쓰면 순서가 가나다순이 된다.
+       2026-08 화면 기준의 팀·항목 순서를 고정해서 쓰고, 목록에 없는 새 팀·새 항목은 맨 뒤에 입력 순서(id)로 붙인다.
+       아래 Map은 처음 나온 순서를 유지하므로 팀 순서와 팀 안의 항목 순서가 모두 이 기준대로 된다. */
+    const rankIn=(list,v)=>{const i=list.indexOf(v);return i<0?list.length:i};
+    const byId=(a,b)=>(+a.id||0)-(+b.id||0);
+    const monthRows=(window.TKP_TEAMITEM||[]).filter(r=>r.month===monthKey).sort((a,b)=>{
+      const ta=rankIn(FIXED_TEAM_ORDER,a.team),tb=rankIn(FIXED_TEAM_ORDER,b.team);
+      if(ta!==tb)return ta-tb;
+      if(a.team!==b.team)return byId(a,b);
+      const list=FIXED_ITEM_ORDER[a.team]||[];
+      const ia=a.item===''?-1:rankIn(list,a.item),ib=b.item===''?-1:rankIn(list,b.item);
+      return ia!==ib?ia-ib:byId(a,b);
+    });
     const byTeam=new Map();
     monthRows.forEach(r=>{
       let t=byTeam.get(r.team);
