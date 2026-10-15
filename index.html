@@ -1125,8 +1125,8 @@ table.tbl td{line-height:1.4}
             <input type="text" class="search" id="problemSearch" placeholder="품번·품목명·거래처 검색" aria-label="점검 판매 리스트 검색">
             <button class="filter-reset" id="problemFilterReset" type="button">초기화</button>
             <select class="month" id="problemTypeFilter">
-              <option value="all">전체</option>
-              <option value="loss" selected>적자판매</option>
+              <option value="all" selected>전체</option>
+              <option value="loss">적자판매</option>
               <option value="material">재료비 이하</option>
               <option value="average">평균가 이하</option>
               <option value="under10">10% 이하</option>
@@ -3128,7 +3128,7 @@ async function problemTypeCount(uiType){
   if(!TKP)return PROBLEM_SALES_DATA.filter(d=>d.types.includes(uiType)).length;
   return (await problemRowsRaw(uiType)).length;
 }
-let problemType='loss';
+let problemType='all'; /* 기본값은 전체 점검 대상. 유형을 좁히려면 드롭다운에서 선택 */
 let problemSearchText='';
 let currentProblemRows=[];
 let problemSort={key:'profit',dir:'asc'};const PROBLEM_TEXT_KEYS=new Set(['item','vendor','owner']);
@@ -3195,8 +3195,8 @@ document.getElementById('problemTypeFilter').addEventListener('change',e=>{
 document.getElementById('problemFilterReset').addEventListener('click',()=>{
   document.getElementById('problemSearch').value='';
   problemSearchText='';
-  problemType='loss';
-  document.getElementById('problemTypeFilter').value='loss';
+  problemType='all';
+  document.getElementById('problemTypeFilter').value='all';
   problemSort={key:'profit',dir:'asc'};
   renderProblemSales();
 });
