@@ -391,7 +391,7 @@ body.profit-focus-open #p1 .card:not(.profit-trend-card),body.profit-focus-open 
 .detail-list-card{display:flex;flex-direction:column}
 /* 점검 판매 리스트: 전체 판매 목록으로 오해하지 않도록 제목을 키우고 "점검"을 주황색으로 강조 */
 .detail-list-card .title-tools h3.problem-title{font-size:24px;font-weight:850;letter-spacing:-.03em;line-height:1.2;margin:0}
-.detail-list-card .problem-flag{display:inline-block;padding:1px 10px 2px;border-radius:9px;background:#fff1e3;color:#e8590c;box-shadow:inset 0 0 0 1.5px #f4a261}
+.detail-list-card .problem-flag{display:inline-block;padding:1px 10px 2px;border-radius:9px;background:#fff8f1;color:#f0904f;box-shadow:inset 0 0 0 1px #f8d9bf}
 .detail-sticky-tools{position:relative;z-index:3;flex:0 0 auto;margin:-4px -2px 0;padding:4px 2px 8px;background:var(--card);box-shadow:0 9px 12px -13px rgba(0,0,0,.55)}
 /* 표 내부 스크롤 영역은 부모 flex 높이에 기대지 않고 고정 높이를 직접 갖는다.
    (검색창 등 상단 툴바가 좁은 화면에서 줄바꿈되며 커져도 표 영역이 눌려서 짤리는 문제를 막기 위함) */
@@ -4253,7 +4253,7 @@ document.getElementById('monthSelect').addEventListener('change',e=>applyGlobalM
 .rag-suggestions button:hover{border-color:#7567c7;color:#7567c7;background:color-mix(in srgb,#7567c7 8%,var(--card))}
 .rag-answer{margin-top:0;font-size:14px}.rag-chat{display:flex;flex-direction:column;gap:16px}.rag-message{display:flex;width:100%}.rag-message-user{justify-content:flex-end}.rag-message-assistant{justify-content:flex-start}.rag-user-pill{position:relative;max-width:78%;padding:11px 17px;border-radius:17px;background:linear-gradient(135deg,#286493,#665bc3);color:#fff;font-size:14.5px;font-weight:750;line-height:1.5;box-shadow:0 5px 15px rgba(47,80,150,.2);word-break:keep-all;overflow-wrap:anywhere}.rag-user-pill::after{content:'';position:absolute;right:-7px;bottom:5px;width:14px;height:14px;background:#665bc3;clip-path:polygon(0 0,100% 100%,0 78%)}.rag-assistant-card{position:relative;width:min(94%,720px);padding:17px 18px;border:1px solid #dce6f1;border-radius:17px;background:#fff;box-shadow:0 7px 22px rgba(31,62,93,.08)}.rag-assistant-card::before{content:'';position:absolute;left:-8px;top:14px;width:14px;height:14px;background:#fff;border-left:1px solid #dce6f1;border-bottom:1px solid #dce6f1;transform:rotate(45deg)}.rag-assistant-label{position:relative;display:flex;align-items:center;gap:7px;margin-bottom:11px;color:#6759b9;font-size:12px;font-weight:850}.rag-assistant-label::before{content:'⌕';display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:#eeebff;color:#6759b9;font-size:14px}.rag-turn-loading .rag-assistant-card{background:#fbfcff}
 .rag-answer-empty{padding:36px 12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.65}
-.rag-start{padding:8px 0}.rag-start h3{margin:0;color:var(--ink);font-size:21px}.rag-start p{margin:7px 0 18px;color:var(--muted);font-size:13.5px}.rag-start-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.rag-start{padding:8px 0}.rag-start h3{margin:0;color:var(--ink);font-size:21px}.rag-start p{margin:7px 0 18px;color:var(--muted);font-size:13.5px}.rag-start-grid{display:grid;grid-template-columns:1fr;gap:11px}
 .rag-starter{position:relative;min-height:66px;border:1px solid #dbe5f0;border-radius:15px;background:#fff;color:#7c8896;padding:13px 15px;text-align:left;font:750 13.5px/1.45 var(--font);cursor:pointer;box-shadow:0 4px 14px rgba(35,65,95,.06);transition:all .18s}.rag-starter:hover{transform:translateY(-2px);border-color:#887bd2;color:#5d50ae;box-shadow:0 8px 18px rgba(73,73,150,.12)}
 .rag-answer h3{margin:0 0 8px;color:var(--ink);font-size:18px;font-weight:850}
 .rag-basis{font-size:18px;font-weight:850}.rag-basis-blue{color:#1a6fe0}.rag-basis-green{color:#247a60}
@@ -4323,7 +4323,9 @@ document.getElementById('monthSelect').addEventListener('change',e=>applyGlobalM
     '이번 달 적자 판매품 이익률 낮은 순 10개','이번 달 적자 판매품 매출 낮은 순','이번 달 이익률 5% 이하 판매품','이번 달 적자 판매품 몇 개야','문제판매 목록 이익률 낮은 순','문제판매 목록 매출 높은 순','이번 달 적자 판매품 20개','이번 달 이익률 낮은 판매품 5개','이번 달 매출 낮은 적자 판매품','이번 달 이익액 낮은 적자 판매품',
     '전체 팀 올해 누계 이익률 비교','전체 팀 올해 누계 매출 비교','전체 팀 올해 누계 영업이익 비교','이번 달 회사 전체 영업이익','이번 달 회사 전체 매출','이번 달 회사 전체 이익률','올해 누계 회사 전체 매출','올해 누계 회사 전체 영업이익','지난달 회사 전체 이익률','작년 동월 대비 회사 전체 매출'
   ];
-  function startHtml(){const start=Math.floor(Math.random()*starterPool.length),questions=Array.from({length:8},(_,i)=>starterPool[(start+i)%starterPool.length]);return `<div class="rag-start"><h3>무엇을 확인할까요?</h3><p>검증된 예시 질문을 선택하거나 아래에 직접 입력하세요.</p><div class="rag-start-grid">${questions.map(q=>`<button class="rag-starter" type="button">${q}</button>`).join('')}</div></div>`}
+  /* 시작 화면에는 재고 대시보드처럼 대표 질문 3개만 보여준다. 전체 질문 목록(starterPool)은 질문 추천 등 다른 곳에서 계속 쓴다. */
+  const STARTER_QUESTIONS=['이번 달 매출 상위 5개 팀','전월보다 매출이 감소한 팀','이번 달 적자 판매품 5개'];
+  function startHtml(){const questions=STARTER_QUESTIONS;return `<div class="rag-start"><h3>무엇을 확인할까요?</h3><p>검증된 예시 질문을 선택하거나 아래에 직접 입력하세요.</p><div class="rag-start-grid">${questions.map(q=>`<button class="rag-starter" type="button">${q}</button>`).join('')}</div></div>`}
   answer.innerHTML=startHtml();
   const norm=value=>String(value||'').toLowerCase().replace(/팀$/,'').replace(/[\s.&/()_-]/g,'');
   const chips=items=>`<div class="rag-conditions">${items.filter(Boolean).map(item=>`<span>${esc(item)}</span>`).join('')}</div>`;
