@@ -4208,6 +4208,8 @@ document.getElementById('monthSelect').addEventListener('change',e=>applyGlobalM
 <style id="ui-rag-prototype-style">
 .rag-launch{position:fixed;right:22px;bottom:22px;z-index:420;border:0;border-radius:999px;background:linear-gradient(135deg,#245985,#7567c7);color:#fff;padding:16px 26px;font:700 16px var(--font);box-shadow:0 8px 24px rgba(36,89,133,.3);cursor:pointer;display:flex;align-items:center;gap:8px;transition:transform .15s ease}
 .rag-launch[hidden]{display:none!important}
+/* AX_챗봇 임시 숨김 — 다시 보이게 하려면 아래 한 줄을 지운다 */
+#ragLaunch,#tkpNaturalDrawer{display:none!important}
 .rag-launch:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(36,89,133,.38)}
 .tkp-natural-drawer{position:fixed!important;z-index:99999!important;top:12px!important;right:8px!important;bottom:12px!important;left:auto!important;width:44vw!important;min-width:480px!important;max-width:760px!important;height:auto!important;margin:0!important;padding:0!important;box-sizing:border-box!important;display:flex!important;flex-direction:column!important;border:1px solid #d8e5f2!important;border-radius:18px!important;background:#fff!important;color:#17212b!important;box-shadow:0 20px 50px rgba(0,0,0,.22)!important;overflow:hidden!important;transform:translate3d(calc(100% + 40px),0,0)!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:transform .4s cubic-bezier(.22,1,.36,1),opacity .4s ease,visibility 0s linear .4s!important}
 .tkp-natural-drawer.open{transform:translate3d(0,0,0)!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important;transition-delay:0s!important}
