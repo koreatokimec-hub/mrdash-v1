@@ -125,6 +125,7 @@ nav.tabs a:not(.on):hover{color:var(--ink2)}
   border:1.5px solid color-mix(in srgb,var(--ink) 30%,transparent)!important;border-radius:999px!important;
   padding:3px 9px;font-size:10.5px;font-weight:650;background:var(--card);color:var(--ink2);
 }
+.seg.mini.unit-seg button{padding:6px 15px;font-size:14px;font-weight:700}
 .seg.mini button+button,.period-split .period-options button+button{border-left:1.5px solid color-mix(in srgb,var(--ink) 30%,transparent)!important}
 .seg.mini button.on,.period-split .period-options button.on,.trend-combo .legend.metric-legend button.on{
   background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important;
@@ -1215,9 +1216,9 @@ table.tbl td{line-height:1.4}
       <div class="kpi"><div class="t">당월 이익액</div><div class="v" id="cdK2">—<small>억</small></div><div class="d" id="cdK2d">—</div></div>
     </div>
 
-    <div class="card"><div class="head"><h3><span class="graph-mark" aria-hidden="true">▥</span>월별 매출액 추이 <span class="period-total" id="cdSalesTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="customerSalesRange" aria-label="매출액 추이 기간"></select></div><svg id="cdSales" width="100%" height="200" viewBox="0 0 1060 200"></svg></div>
+    <div class="card"><div class="head"><h3><span class="graph-mark" aria-hidden="true">▥</span>월별 매출액 추이 <span class="period-total" id="cdSalesTotal"></span></h3><div class="spacer"></div><div class="seg mini unit-seg" role="group" aria-label="금액 단위"><button type="button" data-u="M" class="on">백만</button><button type="button" data-u="E">억</button></div><select class="month team-card-month" id="customerSalesRange" aria-label="매출액 추이 기간"></select></div><svg id="cdSales" width="100%" height="200" viewBox="0 0 1060 200"></svg></div>
     <div class="card"><div class="head"><h3><span class="graph-mark rate" aria-hidden="true">%</span>월별 이익률 추이 <span class="period-total" id="cdRateTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="customerRateRange" aria-label="이익률 추이 기간"></select></div><svg id="cdRate" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
-    <div class="card"><div class="head"><h3><span class="graph-mark profit" aria-hidden="true">₩</span>월별 이익액 추이 <span class="period-total" id="cdProfitTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="customerProfitRange" aria-label="이익액 추이 기간"></select></div><svg id="cdProfit" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
+    <div class="card"><div class="head"><h3><span class="graph-mark profit" aria-hidden="true">₩</span>월별 이익액 추이 <span class="period-total" id="cdProfitTotal"></span></h3><div class="spacer"></div><div class="seg mini unit-seg" role="group" aria-label="금액 단위"><button type="button" data-u="M" class="on">백만</button><button type="button" data-u="E">억</button></div><select class="month team-card-month" id="customerProfitRange" aria-label="이익액 추이 기간"></select></div><svg id="cdProfit" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
   </div>
 </div>
 
@@ -1237,9 +1238,9 @@ table.tbl td{line-height:1.4}
       <div class="kpi"><div class="t" id="pdK2t">당월 이익률</div><div class="v" id="pdK2">—<small>%</small></div></div>
       <div class="kpi"><div class="t" id="pdK3t">당월 손실액</div><div class="v" id="pdK3">—<small>백만원</small></div></div>
     </div>
-    <div class="card"><div class="head"><h3><span class="graph-mark" aria-hidden="true">▥</span>월별 매출액 추이 <span class="period-total" id="pdSalesTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="productSalesRange" aria-label="매출액 추이 기간"></select></div><svg id="pdSales" width="100%" height="200" viewBox="0 0 1060 200"></svg></div>
+    <div class="card"><div class="head"><h3><span class="graph-mark" aria-hidden="true">▥</span>월별 매출액 추이 <span class="period-total" id="pdSalesTotal"></span></h3><div class="spacer"></div><div class="seg mini unit-seg" role="group" aria-label="금액 단위"><button type="button" data-u="M" class="on">백만</button><button type="button" data-u="E">억</button></div><select class="month team-card-month" id="productSalesRange" aria-label="매출액 추이 기간"></select></div><svg id="pdSales" width="100%" height="200" viewBox="0 0 1060 200"></svg></div>
     <div class="card"><div class="head"><h3><span class="graph-mark rate" aria-hidden="true">%</span><span id="pdRateLabel">월별 이익률 추이</span> <span class="period-total" id="pdRateTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="productRateRange" aria-label="이익률 추이 기간"></select></div><svg id="pdRate" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
-    <div class="card"><div class="head"><h3><span class="graph-mark profit" aria-hidden="true">₩</span><span id="pdProfitLabel">월별 손실액 추이</span> <span class="period-total" id="pdProfitTotal"></span></h3><div class="spacer"></div><select class="month team-card-month" id="productProfitRange" aria-label="손실액 추이 기간"></select></div><svg id="pdProfit" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
+    <div class="card"><div class="head"><h3><span class="graph-mark profit" aria-hidden="true">₩</span><span id="pdProfitLabel">월별 손실액 추이</span> <span class="period-total" id="pdProfitTotal"></span></h3><div class="spacer"></div><div class="seg mini unit-seg" role="group" aria-label="금액 단위"><button type="button" data-u="M" class="on">백만</button><button type="button" data-u="E">억</button></div><select class="month team-card-month" id="productProfitRange" aria-label="손실액 추이 기간"></select></div><svg id="pdProfit" width="100%" height="180" viewBox="0 0 1060 180"></svg></div>
   </div>
 </div>
 
@@ -1516,6 +1517,11 @@ if(TKP){
 const tip=document.getElementById('tip');
 const round1=value=>{const n=Number(value);return Math.sign(n)*Math.round((Math.abs(n)+Number.EPSILON)*10)/10};
 const fmtRound1=value=>round1(value).toFixed(1);
+/* 거래처·상품 상세 금액 단위: 데이터는 억 단위, 'M'=백만원(×100) / 'E'=억 */
+let detailUnit='M';
+const duMul=()=>detailUnit==='E'?1:100,duLabel=()=>detailUnit==='E'?'억':'백만원',duDec=()=>detailUnit==='E'?2:1;
+const duRound=v=>+(Number(v)*duMul()).toFixed(duDec());
+const duFmt=v=>(Number(v)*duMul()).toFixed(duDec());
 // 크기는 내용이 바뀔 때(showTip)만 다시 재고, moveTip은 그 값을 재사용한다.
 // 전에는 마우스가 1픽셀만 움직여도 매번 offsetWidth/offsetHeight를 읽어
 // 강제로 레이아웃을 다시 계산했다 — 차트 위에서 마우스를 움직일 때마다
@@ -3430,18 +3436,18 @@ function renderCustomerGraph(key){
   const sum=(arr,a,b)=>arr.slice(a,b+1).reduce((x,y)=>x+(Number(y)||0),0);
   const periodTxt=`${year}년 1~${month}월 합계`;
   if(key==='sales'){
-    const [labels,rawValues]=applyMode(series.sales,customerModes.sales,'sum','M',end),values=rawValues.map(value=>round1(value*100));
-    tBarChart('cdSales',labels,values,'var(--s1)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(customerModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,animate:false});
-    const totalEl=document.getElementById('cdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.sales,yearStart,end)*100)}백만원`;
+    const [labels,rawValues]=applyMode(series.sales,customerModes.sales,'sum','M',end),values=rawValues.map(value=>duRound(value));
+    tBarChart('cdSales',labels,values,'var(--s1)',duLabel(),{line:true,valueLabels:true,labelUnit:duLabel(),name:'매출액',sparseLabels:isLongMode(customerModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:duDec(),axisDecimals:duDec(),animate:false});
+    const totalEl=document.getElementById('cdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${duFmt(sum(series.sales,yearStart,end))}${duLabel()}`;
   }else if(key==='rate'){
     const [labels,values]=applyMode(series.rate,customerModes.rate,'avg','M',end);
     customerLineChart('cdRate',labels,values,'var(--s1)','%','이익률',{sparseLabels:isLongMode(customerModes.rate),largeText:true,balancedDetail:true,zeroBaseline:true,animate:false,dotRadius:4});
     const s=sum(series.sales,yearStart,end),p=sum(series.profit,yearStart,end),r=s?p/s*100:0;
     const totalEl=document.getElementById('cdRateTotal');if(totalEl)totalEl.textContent=`${periodTxt.replace('합계','평균')} ${r.toFixed(1)}%`;
   }else{
-    const [labels,rawValues]=applyMode(series.profit,customerModes.profit,'sum','M',end),values=rawValues.map(value=>round1(value*100));
-    customerLineChart('cdProfit',labels,values,values[values.length-1]>=0?'var(--s1)':'var(--bad)','백만원','이익액',{sparseLabels:isLongMode(customerModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,animate:false});
-    const totalEl=document.getElementById('cdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.profit,yearStart,end)*100)}백만원`;
+    const [labels,rawValues]=applyMode(series.profit,customerModes.profit,'sum','M',end),values=rawValues.map(value=>duRound(value));
+    customerLineChart('cdProfit',labels,values,values[values.length-1]>=0?'var(--s1)':'var(--bad)',duLabel(),'이익액',{sparseLabels:isLongMode(customerModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,decimals:duDec(),axisDecimals:duDec(),animate:false});
+    const totalEl=document.getElementById('cdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${duFmt(sum(series.profit,yearStart,end))}${duLabel()}`;
   }
 }
 let customerKpiIndex=null,customerKpiIsYtd=false;
@@ -3455,10 +3461,10 @@ function renderCustomer(){
   document.getElementById('cdName').textContent=profile.name;
   const cdMonthLabelEl=document.getElementById('cdMonthLabel');if(cdMonthLabelEl)cdMonthLabelEl.textContent=customerKpiIsYtd?'누계':'당월';
   const cdMonthEl=document.getElementById('cdMonth');if(cdMonthEl)cdMonthEl.textContent=customerKpiIsYtd?`${year}년 1~${month}월`:`${year}년 ${String(month).padStart(2,'0')}월`;
-  document.getElementById('cdK1').innerHTML=fmtRound1(lastSales*100)+'<small>백만원</small>';
-  document.getElementById('cdK1d').innerHTML=`<b class="${ds>=0?'up':'down'}">${ds>=0?'▲':'▼'} ${fmtRound1(Math.abs(ds)*100)}백만원</b> 전월`;
-  document.getElementById('cdK2').innerHTML=`<span style="color:${lastProfit>=0?'var(--ink)':'var(--bad)'}">${fmtRound1(lastProfit*100)}</span><small>백만원</small>`;
-  document.getElementById('cdK2d').innerHTML=`<b class="${dp>=0?'up':'down'}">${dp>=0?'▲':'▼'} ${fmtRound1(Math.abs(dp)*100)}백만원</b> 전월`;
+  document.getElementById('cdK1').innerHTML=duFmt(lastSales)+`<small>${duLabel()}</small>`;
+  document.getElementById('cdK1d').innerHTML=`<b class="${ds>=0?'up':'down'}">${ds>=0?'▲':'▼'} ${duFmt(Math.abs(ds))}${duLabel()}</b> 전월`;
+  document.getElementById('cdK2').innerHTML=`<span style="color:${lastProfit>=0?'var(--ink)':'var(--bad)'}">${duFmt(lastProfit)}</span><small>${duLabel()}</small>`;
+  document.getElementById('cdK2d').innerHTML=`<b class="${dp>=0?'up':'down'}">${dp>=0?'▲':'▼'} ${duFmt(Math.abs(dp))}${duLabel()}</b> 전월`;
   document.getElementById('cdK3').innerHTML=`<span style="color:${lastRate>=0?'var(--ink)':'var(--bad)'}">${lastRate.toFixed(1)}</span><small>%</small>`;
   document.getElementById('cdK3d').innerHTML=`<b class="${dr>=0?'up':'down'}">${dr>=0?'▲':'▼'} ${Math.abs(dr).toFixed(1)}%p</b> 전월`;
 }
@@ -3590,18 +3596,18 @@ async function renderProductGraph(key){
   const sum=(arr,a,b)=>arr.slice(a,b+1).reduce((x,y)=>x+(Number(y)||0),0);
   const periodTxt=`${year}년 1~${month}월 합계`;
   if(key==='sales'){
-    const [labels,rawValues]=productApply(series,'sales',productModes.sales,'sum',end),values=rawValues.map(v=>round1(v*100));
-    tBarChart('pdSales',labels,values,'var(--s2)','백만원',{line:true,valueLabels:true,labelUnit:'백만원',name:'매출액',sparseLabels:isLongMode(productModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:1,axisDecimals:1,gradientColors:['#0f6ba8','#5cd0e8'],animate:false});
-    const totalEl=document.getElementById('pdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.sales,yearStart,end)*100)}백만원`;
+    const [labels,rawValues]=productApply(series,'sales',productModes.sales,'sum',end),values=rawValues.map(v=>duRound(v));
+    tBarChart('pdSales',labels,values,'var(--s2)',duLabel(),{line:true,valueLabels:true,labelUnit:duLabel(),name:'매출액',sparseLabels:isLongMode(productModes.sales),largeText:true,detailText:true,balancedDetail:true,hideYAxis:true,decimals:duDec(),axisDecimals:duDec(),gradientColors:['#0f6ba8','#5cd0e8'],animate:false});
+    const totalEl=document.getElementById('pdSalesTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${duFmt(sum(series.sales,yearStart,end))}${duLabel()}`;
   }else if(key==='rate'){
     const [labels,values]=productApply(series,'rate',productModes.rate,'avg',end),negative=values[values.length-1]<0;
     customerLineChart('pdRate',labels,values,negative?'var(--bad)':'var(--s1)','%','이익률',{sparseLabels:isLongMode(productModes.rate),largeText:true,balancedDetail:true,zeroBaseline:true,emphasizeNegative:true,animate:false,dotRadius:4});
     const s=sum(series.sales,yearStart,end),p=sum(series.profit,yearStart,end),r=s?p/s*100:0;
     const totalEl=document.getElementById('pdRateTotal');if(totalEl)totalEl.textContent=`${periodTxt.replace('합계','평균')} ${r.toFixed(1)}%`;
   }else{
-    const [labels,rawValues]=productApply(series,'profit',productModes.profit,'sum',end),values=rawValues.map(v=>round1(v*100)),negative=values[values.length-1]<0;
-    customerLineChart('pdProfit',labels,values,negative?'var(--bad)':'var(--s1)','백만원',negative?'손실액':'이익액',{sparseLabels:isLongMode(productModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,emphasizeNegative:true,decimals:1,axisDecimals:1,animate:false});
-    const totalEl=document.getElementById('pdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${fmtRound1(sum(series.profit,yearStart,end)*100)}백만원`;
+    const [labels,rawValues]=productApply(series,'profit',productModes.profit,'sum',end),values=rawValues.map(v=>duRound(v)),negative=values[values.length-1]<0;
+    customerLineChart('pdProfit',labels,values,negative?'var(--bad)':'var(--s1)',duLabel(),negative?'손실액':'이익액',{sparseLabels:isLongMode(productModes.profit),largeText:true,balancedDetail:true,hideYAxis:true,emphasizeNegative:true,decimals:duDec(),axisDecimals:duDec(),animate:false});
+    const totalEl=document.getElementById('pdProfitTotal');if(totalEl)totalEl.textContent=`${periodTxt} ${duFmt(sum(series.profit,yearStart,end))}${duLabel()}`;
   }
 }
 let productKpiIndex=null,productKpiIsYtd=false;
@@ -3616,13 +3622,20 @@ async function renderProduct(){
   document.getElementById('pdType').textContent='문제 품목 발생 이력';
   const pdMonthLabelEl=document.getElementById('pdMonthLabel');if(pdMonthLabelEl)pdMonthLabelEl.textContent=productKpiIsYtd?'누계':'당월';
   const pdMonthEl=document.getElementById('pdMonth');if(pdMonthEl)pdMonthEl.textContent=productKpiIsYtd?`${year}년 1~${month}월`:`${year}년 ${String(month).padStart(2,'0')}월`;
-  document.getElementById('pdK1').innerHTML=fmtRound1(series.sales[last]*100)+'<small>백만원</small>';
+  document.getElementById('pdK1').innerHTML=duFmt(series.sales[last])+`<small>${duLabel()}</small>`;
   document.getElementById('pdK2').innerHTML=`<span style="color:${negativeRate?'var(--bad)':'var(--ink)'}">${series.rate[last].toFixed(1)}</span><small>%</small>`;
   document.getElementById('pdK3t').textContent=`당월 ${profitName}`;
-  document.getElementById('pdK3').innerHTML=`<span style="color:${negativeProfit?'var(--bad)':'var(--ink)'}">${fmtRound1(series.profit[last]*100)}</span><small>백만원</small>`;
+  document.getElementById('pdK3').innerHTML=`<span style="color:${negativeProfit?'var(--bad)':'var(--ink)'}">${duFmt(series.profit[last])}</span><small>${duLabel()}</small>`;
   const pdRateLabelEl=document.getElementById('pdRateLabel');if(pdRateLabelEl)pdRateLabelEl.textContent='월별 이익률 추이';
   const pdProfitLabelEl=document.getElementById('pdProfitLabel');if(pdProfitLabelEl)pdProfitLabelEl.textContent=`월별 ${profitName} 추이`;
 }
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.unit-seg button');if(!b||b.dataset.u===detailUnit)return;
+  detailUnit=b.dataset.u;
+  document.querySelectorAll('.unit-seg button').forEach(x=>x.classList.toggle('on',x.dataset.u===detailUnit));
+  if(document.getElementById('customerOverlay').classList.contains('on'))renderCustomer();
+  if(document.getElementById('productOverlay').classList.contains('on'))renderProduct();
+});
 function openProduct(row){
   currentProduct=row;
   productKpiIndex=null;productKpiIsYtd=false;
